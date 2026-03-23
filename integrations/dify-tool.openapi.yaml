@@ -1,0 +1,50 @@
+openapi: 3.1.0
+info:
+  title: Dify FastAPI RAG Tool Service
+  version: 0.1.0
+  description: HTTP endpoints that can be imported into Dify as external tools.
+servers:
+  - url: http://host.docker.internal:8000
+paths:
+  /api/v1/retrieval/search:
+    post:
+      operationId: retrievalSearch
+      summary: Search indexed document chunks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                top_k:
+                  type: integer
+                  default: 5
+      responses:
+        "200":
+          description: Retrieval hits
+  /api/v1/chat/query:
+    post:
+      operationId: chatQuery
+      summary: Query the indexed knowledge base
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                top_k:
+                  type: integer
+                  default: 5
+                system_prompt:
+                  type: string
+      responses:
+        "200":
+          description: Final answer with sources

@@ -1,0 +1,120 @@
+import json
+import math
+from collections.abc import AsyncGenerator
+from hashlib import sha256
+
+import httpx
+
+from app.core.config import get_settings
+from app.core.exceptions import AppError
+
+
+class OpenAICompatibleClient:
+    def __init__(self) -> None:
+        self.settings = get_settings()
+
+    def _use_mock_mode(self) -> bool:
+        return not self.settings.openai_api_key.strip()
+
+    def _mock_embedding(self, text: str) -> list[float]:
+        values: list[float] = []
+        counter = 0
+        while len(values) < self.settings.embedding_dimension:
+            digest = sha256(f"{text}:{counter}".encode()).digest()
+            for idx in range(0, len(digest), 4):
+                if len(values) >= self.settings.embedding_dimension:
+                    break
+                chunk = digest[idx : idx + 4]
+                number = int.from_bytes(chunk, "big", signed=False) / (2**32)
+                values.append((number * 2) - 1)
+            counter += 1
+
+        norm = math.sqrt(sum(value * value for value in values)) or 1.0
+        return [value / norm for value in values]
+
+    def _mock_answer(self, prompt: str) -> str:
+        preview = prompt[:500]
+        return (
+            "Local demo mode is enabled because no model API key was provided. "
+            "Retrieval and context assembly succeeded. The response below is a mock answer "
+            "generated from the current context:\n\n"
+            f"{preview}"
+        )
+
+    @property
+    def _headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self.settings.openai_api_key:
+            headers["Authorization"] = f"Bearer {self.settings.openai_api_key}"
+        return headers
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        if self._use_mock_mode():
+            return [self._mock_embedding(text) for text in texts]
+
+        payload = {"model": self.settings.embedding_model, "input": texts}
+        async with httpx.AsyncClient(timeout=self.settings.request_timeout_seconds) as client:
+            response = await client.post(
+                f"{self.settings.openai_base_url}/embeddings",
+                headers=self._headers,
+                json=payload,
+            )
+        if response.is_error:
+            raise AppError(f"Embedding request failed: {response.text}", status_code=502)
+        data = response.json()["data"]
+        return [item["embedding"] for item in data]
+
+    async def chat(self, prompt: str, system_prompt: str | None = None) -> str:
+        if self._use_mock_mode():
+            return self._mock_answer(prompt)
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        payload = {"model": self.settings.chat_model, "messages": messages, "stream": False}
+        async with httpx.AsyncClient(timeout=self.settings.request_timeout_seconds) as client:
+            response = await client.post(
+                f"{self.settings.openai_base_url}/chat/completions",
+                headers=self._headers,
+                json=payload,
+            )
+        if response.is_error:
+            raise AppError(f"Chat request failed: {response.text}", status_code=502)
+        return response.json()["choices"][0]["message"]["content"]
+
+    async def stream_chat(
+        self, prompt: str, system_prompt: str | None = None
+    ) -> AsyncGenerator[str, None]:
+        if self._use_mock_mode():
+            answer = self._mock_answer(prompt)
+            for token in answer.split():
+                yield token + " "
+            return
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        payload = {"model": self.settings.chat_model, "messages": messages, "stream": True}
+
+        async with httpx.AsyncClient(timeout=None) as client:
+            async with client.stream(
+                "POST",
+                f"{self.settings.openai_base_url}/chat/completions",
+                headers=self._headers,
+                json=payload,
+            ) as response:
+                if response.is_error:
+                    text = await response.aread()
+                    raise AppError(f"Streaming chat failed: {text.decode()}", status_code=502)
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    payload = json.loads(data)
+                    delta = payload["choices"][0]["delta"].get("content")
+                    if delta:
+                        yield delta
