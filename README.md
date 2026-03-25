@@ -134,11 +134,13 @@ python scripts/check_embedding_provider.py
 
 ## Dify 集成
 
-建议把此服务配置为 Dify 中的 HTTP 工具：
+建议把此服务配置为 Dify 中的 HTTP 工具或 Workflow 的 HTTP 请求节点：
 
-- 检索场景：调用 `POST /api/v1/retrieval/search`
-- 问答场景：调用 `POST /api/v1/chat/query`
-- 流式场景：调用 `POST /api/v1/chat/stream`
+- `Dify` 工具接入优先使用：
+  - `POST /api/v1/retrieval/search`
+  - `POST /api/v1/chat/query`
+- `POST /api/v1/chat/stream` 保留给原生前端、脚本或自定义客户端直接消费 `SSE`
+- 当前 `Dify` 不适合直接把外部 `SSE` 上游流作为 HTTP Tool / HTTP Request Node 的输入
 
 具体接法见 [docs/dify-integration.md](docs/dify-integration.md)。
 也可以直接参考 `integrations/dify-tool.openapi.yaml` 导入工具描述。
