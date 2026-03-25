@@ -71,6 +71,21 @@ docker compose up --build
 
 如果你使用本地或代理模型，只要兼容 OpenAI 的 `chat/completions` 与 `embeddings` 接口即可。
 
+如果你的聊天模型和 embedding 模型不在同一个提供方，也可以拆开配置：
+
+- `CHAT_BASE_URL`
+- `CHAT_API_KEY`
+- `EMBEDDING_BASE_URL`
+- `EMBEDDING_API_KEY`
+
+例如使用 `DeepSeek` 做聊天时，可以只配置：
+
+- `CHAT_BASE_URL=https://api.deepseek.com/v1`
+- `CHAT_API_KEY=<your-key>`
+- `CHAT_MODEL=deepseek-chat`
+
+如果暂时没有独立的 embedding 服务，项目会继续使用本地 mock embedding 作为演示模式，不会阻塞主链路联调。
+
 ## Dify 集成
 
 建议把此服务配置为 Dify 中的 HTTP 工具：
