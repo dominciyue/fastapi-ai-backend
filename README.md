@@ -113,3 +113,16 @@ docker compose up --build
 - 高级评测与可观测性
 
 这些内容可以在后续增强阶段补齐。
+
+## 冒烟测试
+
+服务启动后，可以按下面顺序做一轮最小链路验证：
+
+```bash
+python scripts/smoke_upload.py
+python scripts/smoke_index.py <document_id>
+python scripts/smoke_task.py <task_id>
+python scripts/smoke_retrieval.py
+python scripts/smoke_query.py
+python scripts/smoke_stream.py
+```
