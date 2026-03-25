@@ -58,6 +58,7 @@ docker compose up --build
 
 - Week 1：`docs/week1-summary.md`
 - Week 2：`docs/week2-summary.md`
+- Week 3：`docs/week3-summary.md`
 - Dify Week 2 复盘：`docs/dify-week2-review.md`
 
 ## 环境变量
