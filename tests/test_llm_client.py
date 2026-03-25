@@ -1,6 +1,7 @@
 import pytest
 
 from app.core.config import get_settings
+from app.core.exceptions import AppError
 from app.services.llm_client import OpenAICompatibleClient
 
 
@@ -106,3 +107,16 @@ def test_chat_and_embedding_settings_fall_back_to_openai_defaults() -> None:
         settings.chat_api_key = original_chat_api_key
         settings.embedding_base_url = original_embedding_base_url
         settings.embedding_api_key = original_embedding_api_key
+
+
+def test_validate_embedding_dimensions_raises_on_mismatch() -> None:
+    settings = get_settings()
+    original_dimension = settings.embedding_dimension
+    settings.embedding_dimension = 1536
+
+    try:
+        client = OpenAICompatibleClient()
+        with pytest.raises(AppError, match="Embedding dimension mismatch"):
+            client._validate_embedding_dimensions([[0.1] * 1024])
+    finally:
+        settings.embedding_dimension = original_dimension

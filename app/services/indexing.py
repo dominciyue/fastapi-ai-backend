@@ -58,9 +58,12 @@ class IndexingService:
             self.db.commit()
             return self.mark_task(task_id, TaskStatus.completed, f"Indexed {len(chunks)} chunks.")
         except Exception as exc:  # noqa: BLE001
-            document.status = DocumentStatus.failed
-            document.error_message = str(exc)
-            self.db.commit()
+            self.db.rollback()
+            document = self.db.get(Document, task.document_id)
+            if document:
+                document.status = DocumentStatus.failed
+                document.error_message = str(exc)
+                self.db.commit()
             return self.mark_task(task_id, TaskStatus.failed, str(exc))
 
     def get_task_with_document(self, task_id: str) -> tuple[IndexingTask, Document]:

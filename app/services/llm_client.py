@@ -66,6 +66,20 @@ class OpenAICompatibleClient:
             headers["Authorization"] = f"Bearer {api_key}"
         return headers
 
+    def _validate_embedding_dimensions(self, embeddings: list[list[float]]) -> list[list[float]]:
+        for embedding in embeddings:
+            actual_dimension = len(embedding)
+            if actual_dimension != self.settings.embedding_dimension:
+                raise AppError(
+                    "Embedding dimension mismatch: "
+                    f"configured EMBEDDING_DIMENSION={self.settings.embedding_dimension}, "
+                    f"but provider returned {actual_dimension}. "
+                    "Update EMBEDDING_DIMENSION to match the provider, then recreate or migrate "
+                    "the pgvector schema before re-indexing.",
+                    status_code=502,
+                )
+        return embeddings
+
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if self._use_mock_embedding_mode():
             return [self._mock_embedding(text) for text in texts]
@@ -78,9 +92,18 @@ class OpenAICompatibleClient:
                 json=payload,
             )
         if response.is_error:
-            raise AppError(f"Embedding request failed: {response.text}", status_code=502)
+            detail = response.text.strip() or "empty response body"
+            if response.status_code == 404:
+                detail = (
+                    f"{detail}. The configured provider may not expose an /embeddings endpoint "
+                    "or the embedding model may not exist."
+                )
+            raise AppError(
+                f"Embedding request failed ({response.status_code}): {detail}",
+                status_code=502,
+            )
         data = response.json()["data"]
-        return [item["embedding"] for item in data]
+        return self._validate_embedding_dimensions([item["embedding"] for item in data])
 
     async def chat(self, prompt: str, system_prompt: str | None = None) -> str:
         if self._use_mock_chat_mode():

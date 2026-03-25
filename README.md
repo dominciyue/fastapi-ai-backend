@@ -86,6 +86,51 @@ docker compose up --build
 
 如果暂时没有独立的 embedding 服务，项目会继续使用本地 mock embedding 作为演示模式，不会阻塞主链路联调。
 
+## 真实 Embedding 接入
+
+当前项目已经支持把 `chat` 和 `embedding` 拆开配置，但需要注意：
+
+- 你现在使用的 `DeepSeek` 账号只暴露了 `deepseek-chat` 和 `deepseek-reasoner`
+- 该账号下未发现可用的 embedding 模型
+- 直接请求 `https://api.deepseek.com/v1/embeddings` 会返回 `404`
+
+这意味着：
+
+- `DeepSeek` 目前适合继续做聊天模型
+- 真实 embedding 需要接入另一个兼容 OpenAI `/embeddings` 的提供方
+
+你需要额外准备：
+
+- `EMBEDDING_BASE_URL`
+- `EMBEDDING_API_KEY`
+- `EMBEDDING_MODEL`
+- `EMBEDDING_DIMENSION`
+
+配置完成后，可先运行：
+
+```bash
+python scripts/check_embedding_provider.py
+```
+
+它会输出：
+
+- 当前 embedding 服务地址
+- 当前 embedding 模型名
+- 配置的维度
+- 实际返回的向量维度
+
+如果返回维度和 `EMBEDDING_DIMENSION` 不一致，项目现在会直接报清晰错误，避免你在索引中途才发现问题。
+
+### 维度切换提醒
+
+`pgvector` 列维度是在表结构里固定的。
+
+如果你从 mock / 旧 embedding 模型切到新的真实 embedding 模型，且维度发生变化，例如：
+
+- `1536 -> 1024`
+
+那么你需要在本地重新创建或迁移数据库结构后，再重新做索引。对于当前演示项目，最直接的方式通常是重建本地容器数据卷后重新上传并索引文档。
+
 ## Dify 集成
 
 建议把此服务配置为 Dify 中的 HTTP 工具：
