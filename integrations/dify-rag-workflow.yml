@@ -1,0 +1,286 @@
+app:
+  description: Minimal workflow that calls the imported FastAPI RAG tools from Dify.
+  icon: "\U0001F9E0"
+  icon_background: '#E4FBCC'
+  mode: workflow
+  name: fastapi-rag-dify-workflow
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.6.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+    opening_statement: ''
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: tool
+      id: start-to-retrieval
+      source: start_node
+      sourceHandle: source
+      target: retrieval_node
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: tool
+        targetType: tool
+      id: retrieval-to-chat
+      source: retrieval_node
+      sourceHandle: source
+      target: chat_node
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: tool
+        targetType: code
+      id: chat-to-parser
+      source: chat_node
+      sourceHandle: source
+      target: parse_node
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: template-transform
+      id: parser-to-template
+      source: parse_node
+      sourceHandle: source
+      target: template_node
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: template-transform
+        targetType: end
+      id: template-to-end
+      source: template_node
+      sourceHandle: source
+      target: end_node
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        desc: ''
+        selected: false
+        title: Start
+        type: start
+        variables:
+        - label: question
+          max_length: null
+          options: []
+          required: true
+          type: text-input
+          variable: question
+      height: 90
+      id: start_node
+      position:
+        x: 30
+        y: 260
+      positionAbsolute:
+        x: 30
+        y: 260
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        desc: Retrieve relevant chunks from the FastAPI RAG service.
+        provider_id: 0de0e499-331c-4530-8ae7-10953cd67337
+        provider_name: fastapi_rag_tool_service
+        provider_type: api
+        selected: false
+        title: Retrieval Search
+        tool_configurations: {}
+        tool_description: Returns the most relevant indexed document chunks for a user query.
+        tool_label: retrievalSearch
+        tool_name: retrievalSearch
+        tool_node_version: '2'
+        tool_parameters:
+          query:
+            type: mixed
+            value: '{{#start_node.question#}}'
+          top_k:
+            type: constant
+            value: 3
+        type: tool
+      height: 116
+      id: retrieval_node
+      position:
+        x: 334
+        y: 180
+      positionAbsolute:
+        x: 334
+        y: 180
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        desc: Ask the FastAPI RAG service for a final answer with sources.
+        provider_id: 0de0e499-331c-4530-8ae7-10953cd67337
+        provider_name: fastapi_rag_tool_service
+        provider_type: api
+        selected: false
+        title: Chat Query
+        tool_configurations: {}
+        tool_description: Returns a final answer plus the retrieved source snippets.
+        tool_label: chatQuery
+        tool_name: chatQuery
+        tool_node_version: '2'
+        tool_parameters:
+          query:
+            type: mixed
+            value: '{{#start_node.question#}}'
+          top_k:
+            type: constant
+            value: 3
+          system_prompt:
+            type: constant
+            value: Please answer briefly in English.
+        type: tool
+      height: 116
+      id: chat_node
+      position:
+        x: 638
+        y: 180
+      positionAbsolute:
+        x: 638
+        y: 180
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        code: "import json\n\n\ndef main(raw_json: str) -> dict:\n    payload = json.loads(raw_json or '{}')\n    answer = payload.get('answer', '')\n    sources = payload.get('sources') or []\n\n    formatted_sources = []\n    for index, source in enumerate(sources, start=1):\n        filename = source.get('filename', 'unknown')\n        content = (source.get('content') or '').replace('\\n', ' ').strip()\n        preview = content[:120]\n        formatted_sources.append(f'{index}. {filename}: {preview}')\n\n    return {\n        'answer': answer,\n        'sources': '\\n'.join(formatted_sources),\n    }\n"
+        code_language: python3
+        desc: Parse the API tool JSON payload into display-friendly fields.
+        outputs:
+          answer:
+            children: null
+            type: string
+          sources:
+            children: null
+            type: string
+        selected: false
+        title: Parse Chat Result
+        type: code
+        variables:
+        - value_selector:
+          - chat_node
+          - text
+          value_type: string
+          variable: raw_json
+      height: 90
+      id: parse_node
+      position:
+        x: 942
+        y: 180
+      positionAbsolute:
+        x: 942
+        y: 180
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        desc: ''
+        selected: false
+        template: "Answer:\n{{ answer }}\n\nSources:\n{{ sources }}"
+        title: Format Final Output
+        type: template-transform
+        variables:
+        - value_selector:
+          - parse_node
+          - answer
+          value_type: string
+          variable: answer
+        - value_selector:
+          - parse_node
+          - sources
+          value_type: string
+          variable: sources
+      height: 54
+      id: template_node
+      position:
+        x: 1246
+        y: 180
+      positionAbsolute:
+        x: 1246
+        y: 180
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        desc: ''
+        outputs:
+        - value_selector:
+          - template_node
+          - output
+          value_type: string
+          variable: final_output
+        - value_selector:
+          - parse_node
+          - answer
+          value_type: string
+          variable: answer
+        - value_selector:
+          - parse_node
+          - sources
+          value_type: string
+          variable: sources
+        selected: false
+        title: End
+        type: end
+      height: 90
+      id: end_node
+      position:
+        x: 1550
+        y: 260
+      positionAbsolute:
+        x: 1550
+        y: 260
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.7

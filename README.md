@@ -59,6 +59,7 @@ docker compose up --build
 - Week 1：`docs/week1-summary.md`
 - Week 2：`docs/week2-summary.md`
 - Week 3：`docs/week3-summary.md`
+- Week 4：`docs/week4-summary.md`
 - Dify Week 2 复盘：`docs/dify-week2-review.md`
 
 ## 环境变量
@@ -144,6 +145,7 @@ python scripts/check_embedding_provider.py
 
 具体接法见 [docs/dify-integration.md](docs/dify-integration.md)。
 也可以直接参考 `integrations/dify-tool.openapi.yaml` 导入工具描述。
+如果要直接复用一条最小 workflow，可参考 `integrations/dify-rag-workflow.yml`。
 
 ## 开发说明
 

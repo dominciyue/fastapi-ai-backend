@@ -90,6 +90,36 @@
 - 文档片段检索
 - 带引用来源的同步回答
 
+如果你希望直接复用一条最小 workflow，而不是手工在界面里拖节点，当前仓库还提供了：
+
+- `integrations/dify-rag-workflow.yml`
+
+它对应的是一条最小链路：
+
+1. `Start`
+2. `retrievalSearch`
+3. `chatQuery`
+4. `Parse Chat Result`
+5. `End`
+
+适合快速验证：
+
+- `Dify Workflow`
+- 外部 API Tool
+- `FastAPI RAG` 服务
+
+这三者是否已经真正串起来。
+
+当前这份 workflow 已经做过一轮输出优化：
+
+- `chatQuery` 的原始 JSON 文本不会直接暴露给最终结果
+- 中间通过 `Code` 节点解析为更适合展示的字段
+- 再通过 `Template` 节点做最终展示排版
+- `End` 节点当前会输出：
+  - `final_output`
+  - `answer`
+  - `sources`
+
 ## 示例请求
 
 ## 示例请求
