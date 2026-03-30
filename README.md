@@ -183,6 +183,12 @@ python scripts/check_embedding_provider.py
 服务启动后，可以按下面顺序做一轮最小链路验证：
 
 ```bash
+python scripts/smoke_all.py
+```
+
+如果你想逐步检查每个阶段，也可以按下面顺序单独执行：
+
+```bash
 python scripts/smoke_upload.py
 python scripts/smoke_index.py <document_id>
 python scripts/smoke_task.py <task_id>

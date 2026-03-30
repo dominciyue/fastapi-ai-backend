@@ -90,6 +90,14 @@ curl http://127.0.0.1:8000/health/ready
 
 2. 运行最小冒烟链路
 
+优先推荐一键执行：
+
+```bash
+python scripts/smoke_all.py
+```
+
+如果你需要逐步定位问题，再拆成单步脚本：
+
 ```bash
 python scripts/smoke_upload.py
 python scripts/smoke_index.py <document_id>
