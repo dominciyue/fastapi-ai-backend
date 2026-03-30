@@ -5,6 +5,40 @@
 - Base URL: `http://localhost:8000`
 - Prefix: `/api/v1`
 
+## 健康检查
+
+### Liveness
+
+- Method: `GET`
+- Path: `/health`
+
+返回：
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### Readiness
+
+- Method: `GET`
+- Path: `/health/ready`
+
+返回示例：
+
+```json
+{
+  "status": "ok",
+  "checks": {
+    "database": true,
+    "redis": true
+  }
+}
+```
+
+当依赖未就绪时，接口返回 `503`。
+
 ## 1. 上传文档
 
 - Method: `POST`

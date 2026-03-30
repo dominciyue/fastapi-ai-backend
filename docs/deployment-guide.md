@@ -7,7 +7,7 @@
 当前仓库提供两套运行方式：
 
 - `docker-compose.yml`：偏开发环境，`api` 服务默认带 `--reload`
-- `docker-compose.prod.yml`：偏演示 / 交付环境，关闭热重载并补上重启策略与 API 健康检查
+- `docker-compose.prod.yml`：偏演示 / 交付环境，关闭热重载并补上重启策略与 `readiness` 检查
 
 如果你只是本地开发，继续使用默认 compose 即可。
 
@@ -74,6 +74,18 @@ curl http://127.0.0.1:8000/health
 
 ```json
 {"status":"ok"}
+```
+
+建议再检查一次依赖是否可用：
+
+```bash
+curl http://127.0.0.1:8000/health/ready
+```
+
+预期返回：
+
+```json
+{"status":"ok","checks":{"database":true,"redis":true}}
 ```
 
 2. 运行最小冒烟链路
@@ -150,5 +162,5 @@ python scripts/check_embedding_provider.py
 部署部分可以这样讲：
 
 - 这个项目不只是一个本地 demo，我把开发态和演示态的 compose 拆开了
-- 演示态关闭热重载，并补了重启策略和健康检查，降低现场联调风险
+- 演示态关闭热重载，并补了重启策略和依赖级 `readiness` 检查，降低现场联调风险
 - 配合 smoke scripts，可以快速证明上传、索引、检索、问答、流式输出整条链路是通的

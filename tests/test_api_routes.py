@@ -68,6 +68,38 @@ def test_healthcheck(monkeypatch) -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_readiness_check_healthy(monkeypatch) -> None:
+    monkeypatch.setattr("app.main.init_db", lambda: None)
+    monkeypatch.setattr("app.main.setup_logging", lambda: None)
+    monkeypatch.setattr("app.main.check_database_connection", lambda: True)
+    monkeypatch.setattr("app.main.check_redis_connection", lambda: True)
+
+    with TestClient(app) as client:
+        response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "checks": {"database": True, "redis": True},
+    }
+
+
+def test_readiness_check_degraded(monkeypatch) -> None:
+    monkeypatch.setattr("app.main.init_db", lambda: None)
+    monkeypatch.setattr("app.main.setup_logging", lambda: None)
+    monkeypatch.setattr("app.main.check_database_connection", lambda: True)
+    monkeypatch.setattr("app.main.check_redis_connection", lambda: False)
+
+    with TestClient(app) as client:
+        response = client.get("/health/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "degraded",
+        "checks": {"database": True, "redis": False},
+    }
+
+
 def test_upload_document(monkeypatch, tmp_path: Path) -> None:
     fake_db = FakeSession()
     stored_path = tmp_path / "uploaded.md"

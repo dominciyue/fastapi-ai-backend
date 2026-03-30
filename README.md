@@ -10,6 +10,7 @@
 - 检索接口：`POST /api/v1/retrieval/search`
 - 同步问答：`POST /api/v1/chat/query`
 - 流式问答：`POST /api/v1/chat/stream`
+- 就绪检查：`GET /health/ready`
 
 ## 技术栈
 
@@ -59,6 +60,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 
 - OpenAPI: `http://localhost:8000/docs`
 - 健康检查: `http://localhost:8000/health`
+- 就绪检查: `http://localhost:8000/health/ready`
 
 ## 阶段记录
 
