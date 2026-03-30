@@ -49,6 +49,12 @@ cp .env.example .env
 docker compose up --build
 ```
 
+如果你要跑更稳定的演示 / 交付环境，建议改用：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+```
+
 3. 访问：
 
 - OpenAPI: `http://localhost:8000/docs`
@@ -61,6 +67,11 @@ docker compose up --build
 - Week 3：`docs/week3-summary.md`
 - Week 4：`docs/week4-summary.md`
 - Dify Week 2 复盘：`docs/dify-week2-review.md`
+
+## Week 5 资产
+
+- 部署说明：`docs/deployment-guide.md`
+- 面试讲解提纲：`docs/interview-notes.md`
 
 ## 环境变量
 
@@ -146,6 +157,7 @@ python scripts/check_embedding_provider.py
 具体接法见 [docs/dify-integration.md](docs/dify-integration.md)。
 也可以直接参考 `integrations/dify-tool.openapi.yaml` 导入工具描述。
 如果要直接复用一条最小 workflow，可参考 `integrations/dify-rag-workflow.yml`。
+如果要整理演示或交付过程，可结合 `docs/deployment-guide.md` 一起使用。
 
 ## 开发说明
 

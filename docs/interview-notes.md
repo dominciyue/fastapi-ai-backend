@@ -33,6 +33,20 @@
 - 具备任务状态管理、存储、检索、流式输出和部署能力
 - 可以直接接入 `Dify Workflow`
 
+### 5. Week 5 可以重点补充的可信度
+
+- 增加 `GitHub Actions CI`，把 `ruff check .` 和 `pytest` 固化成持续校验
+- 补充演示 / 交付态的 `docker-compose.prod.yml`，关闭热重载并增加重启策略
+- 整理正式部署说明，降低本地联调和现场演示的不确定性
+
+## 适合直接讲给面试官的两分钟版本
+
+我没有把这个项目做成一个只会调模型 API 的 demo，而是拆成了一个可独立部署的 `FastAPI RAG` 服务，再把它接到 `Dify` 里做 workflow 编排。这样我既能展示后端工程能力，比如异步任务、向量检索、流式输出、部署与健康检查，也能展示我对 AI 应用平台边界的理解。
+
+这套服务里，文档上传后会进入异步索引流程，文本被切块、生成 embedding，落到 `PostgreSQL + pgvector` 里；检索和同步问答接口适合直接给 `Dify Tool` 调用，流式问答则保留给原生客户端消费 `SSE`。我还特意把 chat 和 embedding 提供方拆开配置，这样可以用 `DeepSeek` 做聊天、用 `DashScope` 做 embedding，更符合国内可用性的实际情况。
+
+在工程化上，我补了 smoke scripts、CI、部署文档和演示态 compose 配置，所以这个项目不仅能本地跑通，也更适合录屏演示、现场答辩和后续继续增强。
+
 ## 可继续加强的方向
 
 - reranker
