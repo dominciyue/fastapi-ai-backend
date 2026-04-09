@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from fastapi.testclient import TestClient
 
 from app.core.database import get_db
+from app.core.metrics import metrics_store
 from app.main import app
 from app.models import Document, DocumentStatus, IndexingTask, TaskStatus
 from app.schemas.chat import ChatMeta, ChatResponse, ChatSource, TokenUsage
@@ -60,6 +61,7 @@ def _override_db(fake_db: FakeSession):
 def test_healthcheck(monkeypatch) -> None:
     monkeypatch.setattr("app.main.init_db", lambda: None)
     monkeypatch.setattr("app.main.setup_logging", lambda: None)
+    metrics_store.reset()
 
     with TestClient(app) as client:
         response = client.get("/health")
@@ -73,6 +75,7 @@ def test_readiness_check_healthy(monkeypatch) -> None:
     monkeypatch.setattr("app.main.setup_logging", lambda: None)
     monkeypatch.setattr("app.main.check_database_connection", lambda: True)
     monkeypatch.setattr("app.main.check_redis_connection", lambda: True)
+    metrics_store.reset()
 
     with TestClient(app) as client:
         response = client.get("/health/ready")
@@ -89,6 +92,7 @@ def test_readiness_check_degraded(monkeypatch) -> None:
     monkeypatch.setattr("app.main.setup_logging", lambda: None)
     monkeypatch.setattr("app.main.check_database_connection", lambda: True)
     monkeypatch.setattr("app.main.check_redis_connection", lambda: False)
+    metrics_store.reset()
 
     with TestClient(app) as client:
         response = client.get("/health/ready")
@@ -104,6 +108,7 @@ def test_upload_document(monkeypatch, tmp_path: Path) -> None:
     fake_db = FakeSession()
     stored_path = tmp_path / "uploaded.md"
     stored_path.write_text("# uploaded", encoding="utf-8")
+    metrics_store.reset()
 
     monkeypatch.setattr("app.main.init_db", lambda: None)
     monkeypatch.setattr("app.main.setup_logging", lambda: None)
@@ -129,6 +134,7 @@ def test_upload_document(monkeypatch, tmp_path: Path) -> None:
 
 def test_queue_indexing_and_get_task(monkeypatch) -> None:
     fake_db = FakeSession()
+    metrics_store.reset()
     document = Document(
         id=uuid4(),
         filename="sample.md",
@@ -174,6 +180,7 @@ def test_queue_indexing_and_get_task(monkeypatch) -> None:
 
 
 def test_retrieval_search(monkeypatch) -> None:
+    metrics_store.reset()
     hits = [RetrievalHit(
         chunk_id=uuid4(),
         document_id=uuid4(),
@@ -234,6 +241,7 @@ def test_retrieval_search(monkeypatch) -> None:
 
 
 def test_chat_query(monkeypatch) -> None:
+    metrics_store.reset()
     chat_response = ChatResponse(
         answer="This service supports upload and retrieval.",
         sources=[ChatSource(filename="guide.md", content="retrieved context", score=0.12)],
@@ -299,6 +307,7 @@ def test_chat_query(monkeypatch) -> None:
 
 
 def test_chat_stream(monkeypatch) -> None:
+    metrics_store.reset()
     sources = [ChatSource(filename="guide.md", content="retrieved context", score=0.12)]
 
     async def fake_generator() -> AsyncGenerator[str, None]:
@@ -343,3 +352,25 @@ def test_chat_stream(monkeypatch) -> None:
     assert 'token-1 ' in response.text
     assert 'token-2' in response.text
     assert response.headers["X-Request-ID"] == "stream-req-1"
+    assert "X-Response-Time-Ms" in response.headers
+
+
+def test_metrics_endpoint(monkeypatch) -> None:
+    monkeypatch.setattr("app.main.init_db", lambda: None)
+    monkeypatch.setattr("app.main.setup_logging", lambda: None)
+    monkeypatch.setattr("app.main.check_database_connection", lambda: True)
+    monkeypatch.setattr("app.main.check_redis_connection", lambda: True)
+    metrics_store.reset()
+
+    with TestClient(app) as client:
+        client.get("/health")
+        client.get("/health/ready")
+        response = client.get("/metrics")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["http"]["total_requests"] >= 2
+    assert payload["http"]["requests_by_path"]["/health"] >= 1
+    assert payload["http"]["requests_by_path"]["/health/ready"] >= 1
+    assert "average_latency_ms" in payload["http"]
+    assert "retrieval" in payload

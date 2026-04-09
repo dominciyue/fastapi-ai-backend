@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from time import perf_counter
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -11,6 +12,7 @@ from app.core.database import init_db
 from app.core.exceptions import AppError
 from app.core.health import check_database_connection, check_redis_connection
 from app.core.logging import setup_logging
+from app.core.metrics import metrics_store
 
 settings = get_settings()
 
@@ -40,10 +42,20 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
+    started_at = perf_counter()
     request_id = request.headers.get("X-Request-ID", str(uuid4()))
     request.state.request_id = request_id
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:
+        latency_ms = int((perf_counter() - started_at) * 1000)
+        metrics_store.record_http_request(request.url.path, 500, latency_ms)
+        raise
+
+    latency_ms = int((perf_counter() - started_at) * 1000)
+    metrics_store.record_http_request(request.url.path, response.status_code, latency_ms)
     response.headers["X-Request-ID"] = request_id
+    response.headers["X-Response-Time-Ms"] = str(latency_ms)
     return response
 
 
@@ -55,6 +67,11 @@ async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
 @app.get("/health")
 async def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+async def metrics() -> dict[str, object]:
+    return metrics_store.snapshot()
 
 
 @app.get("/health/ready", response_model=None)

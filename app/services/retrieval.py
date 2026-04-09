@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.metrics import metrics_store
 from app.models import Document, DocumentChunk
 from app.schemas.retrieval import RetrievalHit, RetrievalMeta, RetrievalResponse
 from app.services.cache import get_retrieval_cache
@@ -46,6 +47,7 @@ class RetrievalService:
         cached_hits = self.cache.get_search_hits(query, requested_top_k, should_rerank)
         if cached_hits is not None:
             latency_ms = int((perf_counter() - started_at) * 1000)
+            metrics_store.record_retrieval(cache_hit=True, reranked=should_rerank)
             return RetrievalResponse(
                 query=query,
                 hits=cached_hits,
@@ -92,6 +94,7 @@ class RetrievalService:
         )
         self.cache.set_search_hits(query, requested_top_k, should_rerank, final_hits)
         latency_ms = int((perf_counter() - started_at) * 1000)
+        metrics_store.record_retrieval(cache_hit=False, reranked=should_rerank)
         return RetrievalResponse(
             query=query,
             hits=final_hits,

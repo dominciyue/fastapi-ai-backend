@@ -3,12 +3,14 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.metrics import metrics_store
 from app.schemas.retrieval import RetrievalHit
 from app.services.retrieval import RetrievalService
 
 
 @pytest.mark.asyncio
 async def test_search_returns_retrieval_hits(monkeypatch: pytest.MonkeyPatch) -> None:
+    metrics_store.reset()
     chunk_id = uuid4()
     document_id = uuid4()
     chunk = SimpleNamespace(
@@ -61,6 +63,7 @@ async def test_search_returns_retrieval_hits(monkeypatch: pytest.MonkeyPatch) ->
 async def test_search_returns_cached_hits_without_embedding(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    metrics_store.reset()
     cached_hit = RetrievalHit(
         chunk_id=uuid4(),
         document_id=uuid4(),
@@ -93,10 +96,12 @@ async def test_search_returns_cached_hits_without_embedding(
     assert response.meta.cache_hit is True
     assert response.meta.reranked is True
     assert response.meta.candidate_count == 1
+    assert metrics_store.snapshot()["retrieval"]["cache_hits"] == 1
 
 
 @pytest.mark.asyncio
 async def test_search_reranks_hits_by_keyword_overlap(monkeypatch: pytest.MonkeyPatch) -> None:
+    metrics_store.reset()
     chunk_a = SimpleNamespace(
         id=uuid4(),
         document_id=uuid4(),
@@ -145,3 +150,6 @@ async def test_search_reranks_hits_by_keyword_overlap(monkeypatch: pytest.Monkey
     assert response.hits[0].filename == "deploy.md"
     assert response.meta.reranked is True
     assert response.meta.candidate_count == 2
+    metrics = metrics_store.snapshot()
+    assert metrics["retrieval"]["cache_misses"] == 1
+    assert metrics["retrieval"]["rerank_requests"] == 1
