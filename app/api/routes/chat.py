@@ -23,6 +23,7 @@ async def query_chat(
         request.top_k,
         request.system_prompt,
         request_id=request_id,
+        rerank=request.rerank,
     )
 
 
@@ -38,6 +39,7 @@ async def stream_chat(
         request.top_k,
         request.system_prompt,
         request_id=request_id,
+        rerank=request.rerank,
     )
 
     async def event_generator():

@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 5
     enable_retrieval_cache: bool = True
     retrieval_cache_ttl_seconds: int = 120
+    enable_keyword_rerank: bool = True
+    rerank_candidate_multiplier: int = 3
     chunk_size: int = 900
     chunk_overlap: int = 120
     max_file_size_mb: int = 20

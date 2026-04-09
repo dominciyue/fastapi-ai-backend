@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class RetrievalRequest(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=20)
+    rerank: bool | None = None
 
 
 class RetrievalHit(BaseModel):
@@ -21,6 +22,8 @@ class RetrievalMeta(BaseModel):
     request_id: str
     latency_ms: int
     cache_hit: bool
+    reranked: bool
+    candidate_count: int
 
 
 class RetrievalResponse(BaseModel):

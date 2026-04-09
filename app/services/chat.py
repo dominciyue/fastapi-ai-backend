@@ -28,9 +28,15 @@ class ChatService:
         top_k: int,
         system_prompt: str | None,
         request_id: str = "unknown",
+        rerank: bool | None = None,
     ) -> ChatResponse:
         started_at = perf_counter()
-        retrieval_response = await self.retrieval.search(query, top_k, request_id=request_id)
+        retrieval_response = await self.retrieval.search(
+            query,
+            top_k,
+            request_id=request_id,
+            rerank=rerank,
+        )
         hits = retrieval_response.hits
         context = "\n\n".join(f"[{idx + 1}] {hit.content}" for idx, hit in enumerate(hits))
         prompt = (
@@ -55,6 +61,8 @@ class ChatService:
                 request_id=request_id,
                 latency_ms=latency_ms,
                 retrieval_cache_hit=retrieval_response.meta.cache_hit,
+                retrieval_reranked=retrieval_response.meta.reranked,
+                retrieval_candidate_count=retrieval_response.meta.candidate_count,
                 token_usage=self._estimate_token_usage(prompt, answer),
             ),
         )
@@ -65,8 +73,14 @@ class ChatService:
         top_k: int,
         system_prompt: str | None,
         request_id: str = "unknown",
+        rerank: bool | None = None,
     ) -> tuple[list[ChatSource], AsyncGenerator[str, None]]:
-        retrieval_response = await self.retrieval.search(query, top_k, request_id=request_id)
+        retrieval_response = await self.retrieval.search(
+            query,
+            top_k,
+            request_id=request_id,
+            rerank=rerank,
+        )
         hits = retrieval_response.hits
         context = "\n\n".join(f"[{idx + 1}] {hit.content}" for idx, hit in enumerate(hits))
         prompt = (

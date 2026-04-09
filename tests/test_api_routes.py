@@ -183,14 +183,27 @@ def test_retrieval_search(monkeypatch) -> None:
         metadata={"source": "guide.md"},
     )]
 
-    async def fake_search(self, query: str, top_k: int, request_id: str = "unknown"):  # noqa: ARG001
+    async def fake_search(
+        self,
+        query: str,
+        top_k: int,
+        request_id: str = "unknown",
+        rerank: bool | None = None,
+    ):  # noqa: ARG001
         assert query == "how to deploy"
         assert top_k == 3
         assert request_id == "route-req-1"
+        assert rerank is True
         return RetrievalResponse(
             query=query,
             hits=hits,
-            meta=RetrievalMeta(request_id=request_id, latency_ms=4, cache_hit=False),
+            meta=RetrievalMeta(
+                request_id=request_id,
+                latency_ms=4,
+                cache_hit=False,
+                reranked=True,
+                candidate_count=5,
+            ),
         )
 
     monkeypatch.setattr("app.main.init_db", lambda: None)
@@ -203,7 +216,7 @@ def test_retrieval_search(monkeypatch) -> None:
             response = client.post(
                 "/api/v1/retrieval/search",
                 headers={"X-Request-ID": "route-req-1"},
-                json={"query": "how to deploy", "top_k": 3},
+                json={"query": "how to deploy", "top_k": 3, "rerank": True},
             )
     finally:
         app.dependency_overrides.clear()
@@ -215,6 +228,8 @@ def test_retrieval_search(monkeypatch) -> None:
     assert payload["hits"][0]["filename"] == "guide.md"
     assert payload["meta"]["request_id"] == "route-req-1"
     assert payload["meta"]["cache_hit"] is False
+    assert payload["meta"]["reranked"] is True
+    assert payload["meta"]["candidate_count"] == 5
     assert response.headers["X-Request-ID"] == "route-req-1"
 
 
@@ -226,6 +241,8 @@ def test_chat_query(monkeypatch) -> None:
             request_id="chat-req-1",
             latency_ms=9,
             retrieval_cache_hit=True,
+            retrieval_reranked=True,
+            retrieval_candidate_count=6,
             token_usage=TokenUsage(
                 prompt_tokens_estimate=10,
                 completion_tokens_estimate=6,
@@ -240,11 +257,13 @@ def test_chat_query(monkeypatch) -> None:
         top_k: int,
         system_prompt: str | None,
         request_id: str = "unknown",
+        rerank: bool | None = None,
     ):  # noqa: ARG001
         assert query == "what does it do"
         assert top_k == 2
         assert system_prompt == "answer briefly"
         assert request_id == "chat-req-1"
+        assert rerank is True
         return chat_response
 
     monkeypatch.setattr("app.main.init_db", lambda: None)
@@ -257,7 +276,12 @@ def test_chat_query(monkeypatch) -> None:
             response = client.post(
                 "/api/v1/chat/query",
                 headers={"X-Request-ID": "chat-req-1"},
-                json={"query": "what does it do", "top_k": 2, "system_prompt": "answer briefly"},
+                json={
+                    "query": "what does it do",
+                    "top_k": 2,
+                    "system_prompt": "answer briefly",
+                    "rerank": True,
+                },
             )
     finally:
         app.dependency_overrides.clear()
@@ -268,6 +292,8 @@ def test_chat_query(monkeypatch) -> None:
     assert payload["sources"][0]["filename"] == "guide.md"
     assert payload["meta"]["request_id"] == "chat-req-1"
     assert payload["meta"]["retrieval_cache_hit"] is True
+    assert payload["meta"]["retrieval_reranked"] is True
+    assert payload["meta"]["retrieval_candidate_count"] == 6
     assert payload["meta"]["token_usage"]["total_tokens_estimate"] == 16
     assert response.headers["X-Request-ID"] == "chat-req-1"
 
@@ -285,11 +311,13 @@ def test_chat_stream(monkeypatch) -> None:
         top_k: int,
         system_prompt: str | None,
         request_id: str = "unknown",
+        rerank: bool | None = None,
     ):  # noqa: ARG001
         assert query == "stream it"
         assert top_k == 1
         assert system_prompt is None
         assert request_id == "stream-req-1"
+        assert rerank is False
         return sources, fake_generator()
 
     monkeypatch.setattr("app.main.init_db", lambda: None)
@@ -302,7 +330,7 @@ def test_chat_stream(monkeypatch) -> None:
             response = client.post(
                 "/api/v1/chat/stream",
                 headers={"X-Request-ID": "stream-req-1"},
-                json={"query": "stream it", "top_k": 1},
+                json={"query": "stream it", "top_k": 1, "rerank": False},
             )
     finally:
         app.dependency_overrides.clear()

@@ -24,16 +24,16 @@ class RetrievalCache:
             )
         return self._client
 
-    def _key(self, query: str, top_k: int) -> str:
-        digest = sha256(f"{query}:{top_k}".encode()).hexdigest()
+    def _key(self, query: str, top_k: int, rerank: bool) -> str:
+        digest = sha256(f"{query}:{top_k}:{rerank}".encode()).hexdigest()
         return f"retrieval:{digest}"
 
-    def get_search_hits(self, query: str, top_k: int) -> list[RetrievalHit] | None:
+    def get_search_hits(self, query: str, top_k: int, rerank: bool) -> list[RetrievalHit] | None:
         if not self.settings.enable_retrieval_cache:
             return None
 
         try:
-            payload = self._get_client().get(self._key(query, top_k))
+            payload = self._get_client().get(self._key(query, top_k, rerank))
         except RedisError:
             return None
 
@@ -42,7 +42,13 @@ class RetrievalCache:
 
         return [RetrievalHit.model_validate(item) for item in json.loads(payload)]
 
-    def set_search_hits(self, query: str, top_k: int, hits: list[RetrievalHit]) -> None:
+    def set_search_hits(
+        self,
+        query: str,
+        top_k: int,
+        rerank: bool,
+        hits: list[RetrievalHit],
+    ) -> None:
         if not self.settings.enable_retrieval_cache:
             return
 
@@ -50,7 +56,7 @@ class RetrievalCache:
         ttl = self.settings.retrieval_cache_ttl_seconds
 
         try:
-            self._get_client().set(self._key(query, top_k), payload, ex=ttl)
+            self._get_client().set(self._key(query, top_k, rerank), payload, ex=ttl)
         except RedisError:
             return
 

@@ -36,14 +36,22 @@ async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch)
         query: str,
         top_k: int,
         request_id: str = "unknown",
+        rerank: bool | None = None,
     ) -> RetrievalResponse:  # noqa: ARG001
         assert query == "What can this service do?"
         assert top_k == 2
         assert request_id == "req-123"
+        assert rerank is True
         return RetrievalResponse(
             query=query,
             hits=_sample_hits(),
-            meta=RetrievalMeta(request_id=request_id, latency_ms=8, cache_hit=True),
+            meta=RetrievalMeta(
+                request_id=request_id,
+                latency_ms=8,
+                cache_hit=True,
+                reranked=True,
+                candidate_count=4,
+            ),
         )
 
     async def fake_chat(self, prompt: str, system_prompt: str | None = None) -> str:  # noqa: ARG001
@@ -59,6 +67,7 @@ async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch)
         top_k=2,
         system_prompt="answer briefly",
         request_id="req-123",
+        rerank=True,
     )
 
     assert response.answer == "It supports retrieval and chat."
@@ -69,6 +78,8 @@ async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch)
     assert captured["system_prompt"] == "answer briefly"
     assert response.meta.request_id == "req-123"
     assert response.meta.retrieval_cache_hit is True
+    assert response.meta.retrieval_reranked is True
+    assert response.meta.retrieval_candidate_count == 4
     assert response.meta.token_usage.total_tokens_estimate >= 2
 
 
@@ -81,14 +92,22 @@ async def test_stream_answer_returns_sources_and_generator(monkeypatch: pytest.M
         query: str,
         top_k: int,
         request_id: str = "unknown",
+        rerank: bool | None = None,
     ) -> RetrievalResponse:  # noqa: ARG001
         assert query == "Stream a response"
         assert top_k == 1
         assert request_id == "req-stream"
+        assert rerank is False
         return RetrievalResponse(
             query=query,
             hits=_sample_hits()[:1],
-            meta=RetrievalMeta(request_id=request_id, latency_ms=5, cache_hit=False),
+            meta=RetrievalMeta(
+                request_id=request_id,
+                latency_ms=5,
+                cache_hit=False,
+                reranked=False,
+                candidate_count=1,
+            ),
         )
 
     async def fake_stream_chat(self, prompt: str, system_prompt: str | None = None):  # noqa: ARG001
@@ -108,6 +127,7 @@ async def test_stream_answer_returns_sources_and_generator(monkeypatch: pytest.M
         top_k=1,
         system_prompt=None,
         request_id="req-stream",
+        rerank=False,
     )
     chunks = [chunk async for chunk in generator]
 

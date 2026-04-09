@@ -12,6 +12,7 @@
 - 流式问答：`POST /api/v1/chat/stream`
 - 就绪检查：`GET /health/ready`
 - Redis 检索缓存：减少重复 query 的 embedding 与向量检索开销
+- 轻量 rerank：向量召回后按关键词重叠做本地重排
 - 请求级追踪信息：响应头与业务返回体携带 `X-Request-ID`
 - 基础 usage 元信息：同步问答返回估算的 token usage 与链路耗时
 
@@ -183,6 +184,7 @@ python scripts/check_embedding_provider.py
 当前已经补上的增强项包括：
 
 - Redis 检索缓存
+- 轻量关键词 `rerank`
 - 请求级 `request_id`
 - 同步问答 `token usage` 估算与链路耗时元信息
 

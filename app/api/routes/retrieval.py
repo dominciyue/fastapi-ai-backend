@@ -15,4 +15,9 @@ async def search(
     db: Session = Depends(get_db),
 ) -> RetrievalResponse:
     request_id = getattr(http_request.state, "request_id", "unknown")
-    return await RetrievalService(db).search(request.query, request.top_k, request_id=request_id)
+    return await RetrievalService(db).search(
+        request.query,
+        request.top_k,
+        request_id=request_id,
+        rerank=request.rerank,
+    )
