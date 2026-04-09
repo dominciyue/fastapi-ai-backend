@@ -13,6 +13,20 @@ class ChatSource(BaseModel):
     score: float
 
 
+class TokenUsage(BaseModel):
+    prompt_tokens_estimate: int
+    completion_tokens_estimate: int
+    total_tokens_estimate: int
+
+
+class ChatMeta(BaseModel):
+    request_id: str
+    latency_ms: int
+    retrieval_cache_hit: bool
+    token_usage: TokenUsage
+
+
 class ChatResponse(BaseModel):
     answer: str
     sources: list[ChatSource]
+    meta: ChatMeta

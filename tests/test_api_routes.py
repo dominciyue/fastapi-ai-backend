@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 from app.core.database import get_db
 from app.main import app
 from app.models import Document, DocumentStatus, IndexingTask, TaskStatus
-from app.schemas.chat import ChatResponse, ChatSource
-from app.schemas.retrieval import RetrievalHit
+from app.schemas.chat import ChatMeta, ChatResponse, ChatSource, TokenUsage
+from app.schemas.retrieval import RetrievalHit, RetrievalMeta, RetrievalResponse
 
 
 class FakeSession:
@@ -174,21 +174,24 @@ def test_queue_indexing_and_get_task(monkeypatch) -> None:
 
 
 def test_retrieval_search(monkeypatch) -> None:
-    hits = [
-        RetrievalHit(
-            chunk_id=uuid4(),
-            document_id=uuid4(),
-            filename="guide.md",
-            content="retrieved context",
-            score=0.12,
-            metadata={"source": "guide.md"},
-        )
-    ]
+    hits = [RetrievalHit(
+        chunk_id=uuid4(),
+        document_id=uuid4(),
+        filename="guide.md",
+        content="retrieved context",
+        score=0.12,
+        metadata={"source": "guide.md"},
+    )]
 
-    async def fake_search(self, query: str, top_k: int):  # noqa: ARG001
+    async def fake_search(self, query: str, top_k: int, request_id: str = "unknown"):  # noqa: ARG001
         assert query == "how to deploy"
         assert top_k == 3
-        return hits
+        assert request_id == "route-req-1"
+        return RetrievalResponse(
+            query=query,
+            hits=hits,
+            meta=RetrievalMeta(request_id=request_id, latency_ms=4, cache_hit=False),
+        )
 
     monkeypatch.setattr("app.main.init_db", lambda: None)
     monkeypatch.setattr("app.main.setup_logging", lambda: None)
@@ -199,6 +202,7 @@ def test_retrieval_search(monkeypatch) -> None:
         with TestClient(app) as client:
             response = client.post(
                 "/api/v1/retrieval/search",
+                headers={"X-Request-ID": "route-req-1"},
                 json={"query": "how to deploy", "top_k": 3},
             )
     finally:
@@ -209,18 +213,38 @@ def test_retrieval_search(monkeypatch) -> None:
     assert payload["query"] == "how to deploy"
     assert len(payload["hits"]) == 1
     assert payload["hits"][0]["filename"] == "guide.md"
+    assert payload["meta"]["request_id"] == "route-req-1"
+    assert payload["meta"]["cache_hit"] is False
+    assert response.headers["X-Request-ID"] == "route-req-1"
 
 
 def test_chat_query(monkeypatch) -> None:
     chat_response = ChatResponse(
         answer="This service supports upload and retrieval.",
         sources=[ChatSource(filename="guide.md", content="retrieved context", score=0.12)],
+        meta=ChatMeta(
+            request_id="chat-req-1",
+            latency_ms=9,
+            retrieval_cache_hit=True,
+            token_usage=TokenUsage(
+                prompt_tokens_estimate=10,
+                completion_tokens_estimate=6,
+                total_tokens_estimate=16,
+            ),
+        ),
     )
 
-    async def fake_answer(self, query: str, top_k: int, system_prompt: str | None):  # noqa: ARG001
+    async def fake_answer(
+        self,
+        query: str,
+        top_k: int,
+        system_prompt: str | None,
+        request_id: str = "unknown",
+    ):  # noqa: ARG001
         assert query == "what does it do"
         assert top_k == 2
         assert system_prompt == "answer briefly"
+        assert request_id == "chat-req-1"
         return chat_response
 
     monkeypatch.setattr("app.main.init_db", lambda: None)
@@ -232,6 +256,7 @@ def test_chat_query(monkeypatch) -> None:
         with TestClient(app) as client:
             response = client.post(
                 "/api/v1/chat/query",
+                headers={"X-Request-ID": "chat-req-1"},
                 json={"query": "what does it do", "top_k": 2, "system_prompt": "answer briefly"},
             )
     finally:
@@ -241,6 +266,10 @@ def test_chat_query(monkeypatch) -> None:
     payload = response.json()
     assert payload["answer"] == "This service supports upload and retrieval."
     assert payload["sources"][0]["filename"] == "guide.md"
+    assert payload["meta"]["request_id"] == "chat-req-1"
+    assert payload["meta"]["retrieval_cache_hit"] is True
+    assert payload["meta"]["token_usage"]["total_tokens_estimate"] == 16
+    assert response.headers["X-Request-ID"] == "chat-req-1"
 
 
 def test_chat_stream(monkeypatch) -> None:
@@ -250,10 +279,17 @@ def test_chat_stream(monkeypatch) -> None:
         yield "token-1 "
         yield "token-2"
 
-    async def fake_stream_answer(self, query: str, top_k: int, system_prompt: str | None):  # noqa: ARG001
+    async def fake_stream_answer(
+        self,
+        query: str,
+        top_k: int,
+        system_prompt: str | None,
+        request_id: str = "unknown",
+    ):  # noqa: ARG001
         assert query == "stream it"
         assert top_k == 1
         assert system_prompt is None
+        assert request_id == "stream-req-1"
         return sources, fake_generator()
 
     monkeypatch.setattr("app.main.init_db", lambda: None)
@@ -263,7 +299,11 @@ def test_chat_stream(monkeypatch) -> None:
 
     try:
         with TestClient(app) as client:
-            response = client.post("/api/v1/chat/stream", json={"query": "stream it", "top_k": 1})
+            response = client.post(
+                "/api/v1/chat/stream",
+                headers={"X-Request-ID": "stream-req-1"},
+                json={"query": "stream it", "top_k": 1},
+            )
     finally:
         app.dependency_overrides.clear()
 
@@ -274,3 +314,4 @@ def test_chat_stream(monkeypatch) -> None:
     assert 'guide.md' in response.text
     assert 'token-1 ' in response.text
     assert 'token-2' in response.text
+    assert response.headers["X-Request-ID"] == "stream-req-1"

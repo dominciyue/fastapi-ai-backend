@@ -2,7 +2,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.schemas.retrieval import RetrievalHit
+from app.schemas.retrieval import RetrievalHit, RetrievalMeta, RetrievalResponse
 from app.services.chat import ChatService
 
 
@@ -31,10 +31,20 @@ def _sample_hits() -> list[RetrievalHit]:
 async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, str | None] = {}
 
-    async def fake_search(self, query: str, top_k: int) -> list[RetrievalHit]:  # noqa: ARG001
+    async def fake_search(
+        self,
+        query: str,
+        top_k: int,
+        request_id: str = "unknown",
+    ) -> RetrievalResponse:  # noqa: ARG001
         assert query == "What can this service do?"
         assert top_k == 2
-        return _sample_hits()
+        assert request_id == "req-123"
+        return RetrievalResponse(
+            query=query,
+            hits=_sample_hits(),
+            meta=RetrievalMeta(request_id=request_id, latency_ms=8, cache_hit=True),
+        )
 
     async def fake_chat(self, prompt: str, system_prompt: str | None = None) -> str:  # noqa: ARG001
         captured["prompt"] = prompt
@@ -48,6 +58,7 @@ async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch)
         "What can this service do?",
         top_k=2,
         system_prompt="answer briefly",
+        request_id="req-123",
     )
 
     assert response.answer == "It supports retrieval and chat."
@@ -56,16 +67,29 @@ async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch)
     assert "[2] Second retrieved chunk." in str(captured["prompt"])
     assert "Question: What can this service do?" in str(captured["prompt"])
     assert captured["system_prompt"] == "answer briefly"
+    assert response.meta.request_id == "req-123"
+    assert response.meta.retrieval_cache_hit is True
+    assert response.meta.token_usage.total_tokens_estimate >= 2
 
 
 @pytest.mark.asyncio
 async def test_stream_answer_returns_sources_and_generator(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, str | None] = {}
 
-    async def fake_search(self, query: str, top_k: int) -> list[RetrievalHit]:  # noqa: ARG001
+    async def fake_search(
+        self,
+        query: str,
+        top_k: int,
+        request_id: str = "unknown",
+    ) -> RetrievalResponse:  # noqa: ARG001
         assert query == "Stream a response"
         assert top_k == 1
-        return _sample_hits()[:1]
+        assert request_id == "req-stream"
+        return RetrievalResponse(
+            query=query,
+            hits=_sample_hits()[:1],
+            meta=RetrievalMeta(request_id=request_id, latency_ms=5, cache_hit=False),
+        )
 
     async def fake_stream_chat(self, prompt: str, system_prompt: str | None = None):  # noqa: ARG001
         captured["prompt"] = prompt
@@ -83,6 +107,7 @@ async def test_stream_answer_returns_sources_and_generator(monkeypatch: pytest.M
         "Stream a response",
         top_k=1,
         system_prompt=None,
+        request_id="req-stream",
     )
     chunks = [chunk async for chunk in generator]
 

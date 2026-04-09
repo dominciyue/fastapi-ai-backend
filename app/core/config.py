@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     embedding_dimension: int = 1536
     request_timeout_seconds: int = 60
     retrieval_top_k: int = 5
+    enable_retrieval_cache: bool = True
+    retrieval_cache_ttl_seconds: int = 120
     chunk_size: int = 900
     chunk_overlap: int = 120
     max_file_size_mb: int = 20

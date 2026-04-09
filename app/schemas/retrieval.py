@@ -17,6 +17,13 @@ class RetrievalHit(BaseModel):
     metadata: dict
 
 
+class RetrievalMeta(BaseModel):
+    request_id: str
+    latency_ms: int
+    cache_hit: bool
+
+
 class RetrievalResponse(BaseModel):
     query: str
     hits: list[RetrievalHit]
+    meta: RetrievalMeta

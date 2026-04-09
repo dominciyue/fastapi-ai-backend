@@ -11,6 +11,9 @@
 - 同步问答：`POST /api/v1/chat/query`
 - 流式问答：`POST /api/v1/chat/stream`
 - 就绪检查：`GET /health/ready`
+- Redis 检索缓存：减少重复 query 的 embedding 与向量检索开销
+- 请求级追踪信息：响应头与业务返回体携带 `X-Request-ID`
+- 基础 usage 元信息：同步问答返回估算的 token usage 与链路耗时
 
 ## 技术栈
 
@@ -68,6 +71,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 - Week 2：`docs/week2-summary.md`
 - Week 3：`docs/week3-summary.md`
 - Week 4：`docs/week4-summary.md`
+- Week 5：`docs/week5-summary.md`
 - Dify Week 2 复盘：`docs/dify-week2-review.md`
 
 ## Week 5 资产
@@ -174,9 +178,15 @@ python scripts/check_embedding_provider.py
 - 多租户
 - 复杂鉴权
 - reranker
-- 高级评测与可观测性
+- 更完整的 metrics / tracing 平台接入
 
-这些内容可以在后续增强阶段补齐。
+当前已经补上的增强项包括：
+
+- Redis 检索缓存
+- 请求级 `request_id`
+- 同步问答 `token usage` 估算与链路耗时元信息
+
+后续可以继续把这些能力升级到更完整的 `metrics / tracing / rerank` 体系。
 
 ## 冒烟测试
 

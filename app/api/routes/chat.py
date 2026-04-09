@@ -1,6 +1,6 @@
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
@@ -12,14 +12,32 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 @router.post("/query", response_model=ChatResponse)
-async def query_chat(request: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
-    return await ChatService(db).answer(request.query, request.top_k, request.system_prompt)
+async def query_chat(
+    request: ChatRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+) -> ChatResponse:
+    request_id = getattr(http_request.state, "request_id", "unknown")
+    return await ChatService(db).answer(
+        request.query,
+        request.top_k,
+        request.system_prompt,
+        request_id=request_id,
+    )
 
 
 @router.post("/stream")
-async def stream_chat(request: ChatRequest, db: Session = Depends(get_db)) -> EventSourceResponse:
+async def stream_chat(
+    request: ChatRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+) -> EventSourceResponse:
+    request_id = getattr(http_request.state, "request_id", "unknown")
     sources, generator = await ChatService(db).stream_answer(
-        request.query, request.top_k, request.system_prompt
+        request.query,
+        request.top_k,
+        request.system_prompt,
+        request_id=request_id,
     )
 
     async def event_generator():
