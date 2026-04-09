@@ -22,7 +22,10 @@ paths:
       tags: [retrieval]
       operationId: retrievalSearch
       summary: Search indexed document chunks
-      description: Returns the most relevant indexed document chunks for a user query.
+      description: |
+        Returns the most relevant indexed document chunks for a user query.
+        The response includes retrieval metadata such as request id, cache hit state,
+        rerank state, candidate count, and caller-facing warnings.
       requestBody:
         required: true
         content:
@@ -35,6 +38,7 @@ paths:
                 value:
                   query: 如何部署这个服务？
                   top_k: 5
+                  rerank: true
       responses:
         "200":
           description: Retrieval hits
@@ -42,12 +46,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RetrievalResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/chat/query:
     post:
       tags: [chat]
       operationId: chatQuery
       summary: Query the indexed knowledge base
-      description: Returns a final answer plus the retrieved source snippets.
+      description: |
+        Returns a final answer plus the retrieved source snippets.
+        The response includes request-level metadata, retrieval metadata,
+        token usage estimates, and caller-facing warnings.
       requestBody:
         required: true
         content:
@@ -61,6 +74,9 @@ paths:
                   query: 这个项目的核心能力是什么？
                   top_k: 5
                   system_prompt: 请用中文给出简洁回答。
+                  rerank: true
+                  max_context_characters: 3000
+                  max_answer_tokens: 300
       responses:
         "200":
           description: Final answer with sources
@@ -68,6 +84,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChatResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     RetrievalRequest:
@@ -83,6 +105,10 @@ components:
           maximum: 20
           default: 5
           description: Maximum number of hits to return
+        rerank:
+          type: boolean
+          nullable: true
+          description: Override the service default and explicitly enable or disable lightweight keyword reranking
     RetrievalHit:
       type: object
       required: [chunk_id, document_id, filename, content, score, metadata]
@@ -102,9 +128,33 @@ components:
         metadata:
           type: object
           additionalProperties: true
+    RetrievalMeta:
+      type: object
+      required: [request_id, latency_ms, cache_hit, reranked, candidate_count, warnings]
+      properties:
+        request_id:
+          type: string
+          description: Request correlation id
+        latency_ms:
+          type: integer
+          description: End-to-end retrieval latency in milliseconds
+        cache_hit:
+          type: boolean
+          description: Whether the retrieval response came from Redis cache
+        reranked:
+          type: boolean
+          description: Whether lightweight keyword reranking was applied
+        candidate_count:
+          type: integer
+          description: Number of vector candidates considered before final trimming
+        warnings:
+          type: array
+          description: Non-fatal retrieval caveats the caller may want to surface
+          items:
+            type: string
     RetrievalResponse:
       type: object
-      required: [query, hits]
+      required: [query, hits, meta]
       properties:
         query:
           type: string
@@ -112,6 +162,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RetrievalHit"
+        meta:
+          $ref: "#/components/schemas/RetrievalMeta"
     ChatRequest:
       type: object
       required: [query]
@@ -128,6 +180,22 @@ components:
         system_prompt:
           type: string
           description: Optional system prompt injected into the chat request
+        rerank:
+          type: boolean
+          nullable: true
+          description: Override the service default and explicitly enable or disable lightweight keyword reranking
+        max_context_characters:
+          type: integer
+          minimum: 200
+          maximum: 12000
+          nullable: true
+          description: Maximum number of context characters passed to the model
+        max_answer_tokens:
+          type: integer
+          minimum: 32
+          maximum: 2048
+          nullable: true
+          description: Maximum number of completion tokens requested from the chat model
     ChatSource:
       type: object
       required: [filename, content, score]
@@ -138,9 +206,58 @@ components:
           type: string
         score:
           type: number
+    TokenUsage:
+      type: object
+      required:
+        - prompt_tokens_estimate
+        - completion_tokens_estimate
+        - total_tokens_estimate
+      properties:
+        prompt_tokens_estimate:
+          type: integer
+        completion_tokens_estimate:
+          type: integer
+        total_tokens_estimate:
+          type: integer
+    ChatMeta:
+      type: object
+      required:
+        - request_id
+        - latency_ms
+        - retrieval_cache_hit
+        - retrieval_reranked
+        - retrieval_candidate_count
+        - context_characters
+        - context_truncated
+        - answer_max_tokens
+        - warnings
+        - token_usage
+      properties:
+        request_id:
+          type: string
+        latency_ms:
+          type: integer
+        retrieval_cache_hit:
+          type: boolean
+        retrieval_reranked:
+          type: boolean
+        retrieval_candidate_count:
+          type: integer
+        context_characters:
+          type: integer
+        context_truncated:
+          type: boolean
+        answer_max_tokens:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
+        token_usage:
+          $ref: "#/components/schemas/TokenUsage"
     ChatResponse:
       type: object
-      required: [answer, sources]
+      required: [answer, sources, meta]
       properties:
         answer:
           type: string
@@ -148,3 +265,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ChatSource"
+        meta:
+          $ref: "#/components/schemas/ChatMeta"
+    ErrorResponse:
+      type: object
+      required: [detail, error_code, retryable, request_id]
+      properties:
+        detail:
+          type: string
+        error_code:
+          type: string
+        retryable:
+          type: boolean
+        request_id:
+          type: string
