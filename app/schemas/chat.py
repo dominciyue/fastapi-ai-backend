@@ -6,6 +6,8 @@ class ChatRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
     system_prompt: str | None = None
     rerank: bool | None = None
+    max_context_characters: int | None = Field(default=None, ge=200, le=12000)
+    max_answer_tokens: int | None = Field(default=None, ge=32, le=2048)
 
 
 class ChatSource(BaseModel):
@@ -26,6 +28,8 @@ class ChatMeta(BaseModel):
     retrieval_cache_hit: bool
     retrieval_reranked: bool
     retrieval_candidate_count: int
+    context_characters: int
+    answer_max_tokens: int
     token_usage: TokenUsage
 
 

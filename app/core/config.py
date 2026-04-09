@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     retrieval_cache_ttl_seconds: int = 120
     enable_keyword_rerank: bool = True
     rerank_candidate_multiplier: int = 3
+    max_context_characters: int = 3000
+    max_answer_tokens: int = 300
     chunk_size: int = 900
     chunk_overlap: int = 120
     max_file_size_mb: int = 20

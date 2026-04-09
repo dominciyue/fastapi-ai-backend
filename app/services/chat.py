@@ -3,6 +3,7 @@ from time import perf_counter
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.schemas.chat import ChatMeta, ChatResponse, ChatSource, TokenUsage
 from app.services.llm_client import OpenAICompatibleClient
 from app.services.retrieval import RetrievalService
@@ -12,6 +13,7 @@ class ChatService:
     def __init__(self, db: Session) -> None:
         self.retrieval = RetrievalService(db)
         self.client = OpenAICompatibleClient()
+        self.settings = get_settings()
 
     def _estimate_token_usage(self, prompt: str, answer: str) -> TokenUsage:
         prompt_tokens = max(1, len(prompt.split()))
@@ -22,6 +24,30 @@ class ChatService:
             total_tokens_estimate=prompt_tokens + completion_tokens,
         )
 
+    def _build_context(
+        self,
+        hits: list[ChatSource],
+        max_context_characters: int,
+    ) -> tuple[str, int]:
+        lines: list[str] = []
+        total_characters = 0
+
+        for idx, hit in enumerate(hits):
+            chunk = f"[{idx + 1}] {hit.content}"
+            separator = "\n\n" if lines else ""
+            next_total = total_characters + len(separator) + len(chunk)
+            if next_total > max_context_characters:
+                remaining = max_context_characters - total_characters - len(separator)
+                if remaining > 32:
+                    chunk = chunk[:remaining].rstrip() + "..."
+                    lines.append(chunk)
+                    total_characters += len(separator) + len(chunk)
+                break
+            lines.append(chunk)
+            total_characters = next_total
+
+        return "\n\n".join(lines), total_characters
+
     async def answer(
         self,
         query: str,
@@ -29,6 +55,8 @@ class ChatService:
         system_prompt: str | None,
         request_id: str = "unknown",
         rerank: bool | None = None,
+        max_context_characters: int | None = None,
+        max_answer_tokens: int | None = None,
     ) -> ChatResponse:
         started_at = perf_counter()
         retrieval_response = await self.retrieval.search(
@@ -38,14 +66,6 @@ class ChatService:
             rerank=rerank,
         )
         hits = retrieval_response.hits
-        context = "\n\n".join(f"[{idx + 1}] {hit.content}" for idx, hit in enumerate(hits))
-        prompt = (
-            "Use the context below to answer the user.\n"
-            "If the context is insufficient, say so clearly.\n\n"
-            f"Context:\n{context}\n\nQuestion: {query}"
-        )
-        answer = await self.client.chat(prompt, system_prompt=system_prompt)
-        latency_ms = int((perf_counter() - started_at) * 1000)
         sources = [
             ChatSource(
                 filename=hit.filename,
@@ -54,6 +74,20 @@ class ChatService:
             )
             for hit in hits
         ]
+        context_limit = max_context_characters or self.settings.max_context_characters
+        answer_limit = max_answer_tokens or self.settings.max_answer_tokens
+        context, context_characters = self._build_context(sources, context_limit)
+        prompt = (
+            "Use the context below to answer the user.\n"
+            "If the context is insufficient, say so clearly.\n\n"
+            f"Context:\n{context}\n\nQuestion: {query}"
+        )
+        answer = await self.client.chat(
+            prompt,
+            system_prompt=system_prompt,
+            max_tokens=answer_limit,
+        )
+        latency_ms = int((perf_counter() - started_at) * 1000)
         return ChatResponse(
             answer=answer,
             sources=sources,
@@ -63,6 +97,8 @@ class ChatService:
                 retrieval_cache_hit=retrieval_response.meta.cache_hit,
                 retrieval_reranked=retrieval_response.meta.reranked,
                 retrieval_candidate_count=retrieval_response.meta.candidate_count,
+                context_characters=context_characters,
+                answer_max_tokens=answer_limit,
                 token_usage=self._estimate_token_usage(prompt, answer),
             ),
         )
@@ -74,6 +110,8 @@ class ChatService:
         system_prompt: str | None,
         request_id: str = "unknown",
         rerank: bool | None = None,
+        max_context_characters: int | None = None,
+        max_answer_tokens: int | None = None,
     ) -> tuple[list[ChatSource], AsyncGenerator[str, None]]:
         retrieval_response = await self.retrieval.search(
             query,
@@ -82,12 +120,6 @@ class ChatService:
             rerank=rerank,
         )
         hits = retrieval_response.hits
-        context = "\n\n".join(f"[{idx + 1}] {hit.content}" for idx, hit in enumerate(hits))
-        prompt = (
-            "Use the context below to answer the user.\n"
-            "If the context is insufficient, say so clearly.\n\n"
-            f"Context:\n{context}\n\nQuestion: {query}"
-        )
         sources = [
             ChatSource(
                 filename=hit.filename,
@@ -96,4 +128,16 @@ class ChatService:
             )
             for hit in hits
         ]
-        return sources, self.client.stream_chat(prompt, system_prompt=system_prompt)
+        context_limit = max_context_characters or self.settings.max_context_characters
+        answer_limit = max_answer_tokens or self.settings.max_answer_tokens
+        context, _context_characters = self._build_context(sources, context_limit)
+        prompt = (
+            "Use the context below to answer the user.\n"
+            "If the context is insufficient, say so clearly.\n\n"
+            f"Context:\n{context}\n\nQuestion: {query}"
+        )
+        return sources, self.client.stream_chat(
+            prompt,
+            system_prompt=system_prompt,
+            max_tokens=answer_limit,
+        )

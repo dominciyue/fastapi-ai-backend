@@ -54,9 +54,15 @@ async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch)
             ),
         )
 
-    async def fake_chat(self, prompt: str, system_prompt: str | None = None) -> str:  # noqa: ARG001
+    async def fake_chat(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        max_tokens: int | None = None,
+    ) -> str:  # noqa: ARG001
         captured["prompt"] = prompt
         captured["system_prompt"] = system_prompt
+        captured["max_tokens"] = str(max_tokens)
         return "It supports retrieval and chat."
 
     monkeypatch.setattr("app.services.retrieval.RetrievalService.search", fake_search)
@@ -68,18 +74,22 @@ async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch)
         system_prompt="answer briefly",
         request_id="req-123",
         rerank=True,
+        max_context_characters=60,
+        max_answer_tokens=120,
     )
 
     assert response.answer == "It supports retrieval and chat."
     assert [source.filename for source in response.sources] == ["guide.md", "faq.md"]
     assert "[1] First retrieved chunk." in str(captured["prompt"])
-    assert "[2] Second retrieved chunk." in str(captured["prompt"])
     assert "Question: What can this service do?" in str(captured["prompt"])
     assert captured["system_prompt"] == "answer briefly"
+    assert captured["max_tokens"] == "120"
     assert response.meta.request_id == "req-123"
     assert response.meta.retrieval_cache_hit is True
     assert response.meta.retrieval_reranked is True
     assert response.meta.retrieval_candidate_count == 4
+    assert response.meta.context_characters <= 60
+    assert response.meta.answer_max_tokens == 120
     assert response.meta.token_usage.total_tokens_estimate >= 2
 
 
@@ -110,9 +120,15 @@ async def test_stream_answer_returns_sources_and_generator(monkeypatch: pytest.M
             ),
         )
 
-    async def fake_stream_chat(self, prompt: str, system_prompt: str | None = None):  # noqa: ARG001
+    async def fake_stream_chat(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        max_tokens: int | None = None,
+    ):  # noqa: ARG001
         captured["prompt"] = prompt
         captured["system_prompt"] = system_prompt
+        captured["max_tokens"] = str(max_tokens)
         for token in ["token-1 ", "token-2"]:
             yield token
 
@@ -128,6 +144,8 @@ async def test_stream_answer_returns_sources_and_generator(monkeypatch: pytest.M
         system_prompt=None,
         request_id="req-stream",
         rerank=False,
+        max_context_characters=80,
+        max_answer_tokens=64,
     )
     chunks = [chunk async for chunk in generator]
 
@@ -136,3 +154,4 @@ async def test_stream_answer_returns_sources_and_generator(monkeypatch: pytest.M
     assert chunks == ["token-1 ", "token-2"]
     assert "[1] First retrieved chunk." in str(captured["prompt"])
     assert captured["system_prompt"] is None
+    assert captured["max_tokens"] == "64"

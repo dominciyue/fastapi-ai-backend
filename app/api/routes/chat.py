@@ -24,6 +24,8 @@ async def query_chat(
         request.system_prompt,
         request_id=request_id,
         rerank=request.rerank,
+        max_context_characters=request.max_context_characters,
+        max_answer_tokens=request.max_answer_tokens,
     )
 
 
@@ -40,6 +42,8 @@ async def stream_chat(
         request.system_prompt,
         request_id=request_id,
         rerank=request.rerank,
+        max_context_characters=request.max_context_characters,
+        max_answer_tokens=request.max_answer_tokens,
     )
 
     async def event_generator():

@@ -251,6 +251,8 @@ def test_chat_query(monkeypatch) -> None:
             retrieval_cache_hit=True,
             retrieval_reranked=True,
             retrieval_candidate_count=6,
+            context_characters=120,
+            answer_max_tokens=180,
             token_usage=TokenUsage(
                 prompt_tokens_estimate=10,
                 completion_tokens_estimate=6,
@@ -266,12 +268,16 @@ def test_chat_query(monkeypatch) -> None:
         system_prompt: str | None,
         request_id: str = "unknown",
         rerank: bool | None = None,
+        max_context_characters: int | None = None,
+        max_answer_tokens: int | None = None,
     ):  # noqa: ARG001
         assert query == "what does it do"
         assert top_k == 2
         assert system_prompt == "answer briefly"
         assert request_id == "chat-req-1"
         assert rerank is True
+        assert max_context_characters == 500
+        assert max_answer_tokens == 180
         return chat_response
 
     monkeypatch.setattr("app.main.init_db", lambda: None)
@@ -289,6 +295,8 @@ def test_chat_query(monkeypatch) -> None:
                     "top_k": 2,
                     "system_prompt": "answer briefly",
                     "rerank": True,
+                    "max_context_characters": 500,
+                    "max_answer_tokens": 180,
                 },
             )
     finally:
@@ -302,6 +310,8 @@ def test_chat_query(monkeypatch) -> None:
     assert payload["meta"]["retrieval_cache_hit"] is True
     assert payload["meta"]["retrieval_reranked"] is True
     assert payload["meta"]["retrieval_candidate_count"] == 6
+    assert payload["meta"]["context_characters"] == 120
+    assert payload["meta"]["answer_max_tokens"] == 180
     assert payload["meta"]["token_usage"]["total_tokens_estimate"] == 16
     assert response.headers["X-Request-ID"] == "chat-req-1"
 
@@ -321,12 +331,16 @@ def test_chat_stream(monkeypatch) -> None:
         system_prompt: str | None,
         request_id: str = "unknown",
         rerank: bool | None = None,
+        max_context_characters: int | None = None,
+        max_answer_tokens: int | None = None,
     ):  # noqa: ARG001
         assert query == "stream it"
         assert top_k == 1
         assert system_prompt is None
         assert request_id == "stream-req-1"
         assert rerank is False
+        assert max_context_characters == 640
+        assert max_answer_tokens == 96
         return sources, fake_generator()
 
     monkeypatch.setattr("app.main.init_db", lambda: None)
@@ -339,7 +353,13 @@ def test_chat_stream(monkeypatch) -> None:
             response = client.post(
                 "/api/v1/chat/stream",
                 headers={"X-Request-ID": "stream-req-1"},
-                json={"query": "stream it", "top_k": 1, "rerank": False},
+                json={
+                    "query": "stream it",
+                    "top_k": 1,
+                    "rerank": False,
+                    "max_context_characters": 640,
+                    "max_answer_tokens": 96,
+                },
             )
     finally:
         app.dependency_overrides.clear()

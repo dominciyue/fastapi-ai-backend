@@ -105,7 +105,12 @@ class OpenAICompatibleClient:
         data = response.json()["data"]
         return self._validate_embedding_dimensions([item["embedding"] for item in data])
 
-    async def chat(self, prompt: str, system_prompt: str | None = None) -> str:
+    async def chat(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
         if self._use_mock_chat_mode():
             return self._mock_answer(prompt)
 
@@ -114,6 +119,8 @@ class OpenAICompatibleClient:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         payload = {"model": self.settings.chat_model, "messages": messages, "stream": False}
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
         async with httpx.AsyncClient(timeout=self.settings.request_timeout_seconds) as client:
             response = await client.post(
                 f"{self._chat_base_url}/chat/completions",
@@ -125,7 +132,10 @@ class OpenAICompatibleClient:
         return response.json()["choices"][0]["message"]["content"]
 
     async def stream_chat(
-        self, prompt: str, system_prompt: str | None = None
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncGenerator[str, None]:
         if self._use_mock_chat_mode():
             answer = self._mock_answer(prompt)
@@ -138,6 +148,8 @@ class OpenAICompatibleClient:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         payload = {"model": self.settings.chat_model, "messages": messages, "stream": True}
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
 
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
