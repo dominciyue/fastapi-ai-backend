@@ -56,6 +56,7 @@ async def test_search_returns_retrieval_hits(monkeypatch: pytest.MonkeyPatch) ->
     assert response.meta.cache_hit is False
     assert response.meta.reranked is False
     assert response.meta.candidate_count == 1
+    assert response.meta.warnings == ["Retrieval returned fewer hits than requested."]
 
 
 @pytest.mark.asyncio
@@ -94,6 +95,7 @@ async def test_search_returns_cached_hits_without_embedding(
     assert response.meta.cache_hit is True
     assert response.meta.reranked is True
     assert response.meta.candidate_count == 1
+    assert response.meta.warnings == ["Retrieval returned fewer hits than requested."]
     assert metrics_store.snapshot()["retrieval"]["cache_hits"] == 1
 
 
@@ -147,6 +149,7 @@ async def test_search_reranks_hits_by_keyword_overlap(monkeypatch: pytest.Monkey
     assert response.hits[0].filename == "deploy.md"
     assert response.meta.reranked is True
     assert response.meta.candidate_count == 2
+    assert response.meta.warnings == []
     metrics = metrics_store.snapshot()
     assert metrics["retrieval"]["cache_misses"] == 1
     assert metrics["retrieval"]["rerank_requests"] == 1

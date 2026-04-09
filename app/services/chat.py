@@ -91,6 +91,11 @@ class ChatService:
             max_tokens=answer_limit,
         )
         latency_ms = int((perf_counter() - started_at) * 1000)
+        warnings = list(retrieval_response.meta.warnings)
+        if context_truncated:
+            warnings.append("Context was truncated to fit the configured character limit.")
+        if not sources:
+            warnings.append("Answer was generated without retrieval hits.")
         usage = self._estimate_token_usage(prompt, answer)
         metrics_store.record_chat(
             streamed=False,
@@ -111,6 +116,7 @@ class ChatService:
                 context_characters=context_characters,
                 context_truncated=context_truncated,
                 answer_max_tokens=answer_limit,
+                warnings=warnings,
                 token_usage=usage,
             ),
         )

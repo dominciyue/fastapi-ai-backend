@@ -24,6 +24,7 @@ class RetrievalMeta(BaseModel):
     cache_hit: bool
     reranked: bool
     candidate_count: int
+    warnings: list[str] = Field(default_factory=list)
 
 
 class RetrievalResponse(BaseModel):

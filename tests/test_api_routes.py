@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from fastapi.testclient import TestClient
 
 from app.core.database import get_db
+from app.core.exceptions import AppError
 from app.main import app
 from app.models import Document, DocumentStatus, IndexingTask, TaskStatus
 from app.schemas.chat import ChatMeta, ChatResponse, ChatSource, TokenUsage
@@ -201,6 +202,7 @@ def test_retrieval_search(monkeypatch) -> None:
                 cache_hit=False,
                 reranked=True,
                 candidate_count=5,
+                warnings=[],
             ),
         )
 
@@ -228,6 +230,7 @@ def test_retrieval_search(monkeypatch) -> None:
     assert payload["meta"]["cache_hit"] is False
     assert payload["meta"]["reranked"] is True
     assert payload["meta"]["candidate_count"] == 5
+    assert payload["meta"]["warnings"] == []
     assert response.headers["X-Request-ID"] == "route-req-1"
 
 
@@ -244,6 +247,7 @@ def test_chat_query(monkeypatch) -> None:
             context_characters=120,
             context_truncated=False,
             answer_max_tokens=180,
+            warnings=[],
             token_usage=TokenUsage(
                 prompt_tokens_estimate=10,
                 completion_tokens_estimate=6,
@@ -304,6 +308,7 @@ def test_chat_query(monkeypatch) -> None:
     assert payload["meta"]["context_characters"] == 120
     assert payload["meta"]["context_truncated"] is False
     assert payload["meta"]["answer_max_tokens"] == 180
+    assert payload["meta"]["warnings"] == []
     assert payload["meta"]["token_usage"]["total_tokens_estimate"] == 16
     assert response.headers["X-Request-ID"] == "chat-req-1"
 
@@ -385,3 +390,50 @@ def test_metrics_endpoint(monkeypatch) -> None:
     assert "average_latency_ms" in payload["http"]
     assert "retrieval" in payload
     assert "chat" in payload
+
+
+def test_app_error_uses_standardized_payload(monkeypatch) -> None:
+    monkeypatch.setattr("app.main.init_db", lambda: None)
+    monkeypatch.setattr("app.main.setup_logging", lambda: None)
+
+    @app.get("/test-app-error")
+    async def raise_app_error():
+        raise AppError(
+            "temporary upstream failure",
+            status_code=503,
+            error_code="upstream_unavailable",
+            retryable=True,
+        )
+
+    try:
+        with TestClient(app) as client:
+            response = client.get("/test-app-error", headers={"X-Request-ID": "err-req-1"})
+    finally:
+        app.router.routes.pop()
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "temporary upstream failure",
+        "error_code": "upstream_unavailable",
+        "retryable": True,
+        "request_id": "err-req-1",
+    }
+
+
+def test_validation_error_uses_standardized_payload(monkeypatch) -> None:
+    monkeypatch.setattr("app.main.init_db", lambda: None)
+    monkeypatch.setattr("app.main.setup_logging", lambda: None)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/chat/query",
+            headers={"X-Request-ID": "validation-req-1"},
+            json={"query": "x", "top_k": 1, "max_answer_tokens": 8},
+        )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error_code"] == "validation_error"
+    assert payload["retryable"] is False
+    assert payload["request_id"] == "validation-req-1"
+    assert "max_answer_tokens" in payload["detail"]

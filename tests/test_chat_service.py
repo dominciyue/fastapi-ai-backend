@@ -52,6 +52,7 @@ async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch)
                 cache_hit=True,
                 reranked=True,
                 candidate_count=4,
+                warnings=[],
             ),
         )
 
@@ -92,6 +93,7 @@ async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch)
     assert response.meta.context_characters <= 40
     assert response.meta.context_truncated is True
     assert response.meta.answer_max_tokens == 120
+    assert "Context was truncated" in " ".join(response.meta.warnings)
     assert response.meta.token_usage.total_tokens_estimate >= 2
     metrics = metrics_store.snapshot()
     assert metrics["chat"]["total_requests"] == 1
@@ -123,6 +125,7 @@ async def test_stream_answer_returns_sources_and_generator(monkeypatch: pytest.M
                 cache_hit=False,
                 reranked=False,
                 candidate_count=1,
+                warnings=["Retrieval returned fewer hits than requested."],
             ),
         )
 

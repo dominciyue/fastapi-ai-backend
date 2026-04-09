@@ -3,6 +3,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -59,9 +60,48 @@ async def add_request_id(request: Request, call_next):
     return response
 
 
+def _error_payload(
+    request: Request,
+    *,
+    detail: str,
+    error_code: str,
+    retryable: bool,
+) -> dict[str, object]:
+    return {
+        "detail": detail,
+        "error_code": error_code,
+        "retryable": retryable,
+        "request_id": getattr(request.state, "request_id", "unknown"),
+    }
+
+
 @app.exception_handler(AppError)
-async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=_error_payload(
+            request,
+            detail=exc.message,
+            error_code=exc.error_code,
+            retryable=exc.retryable,
+        ),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content=_error_payload(
+            request,
+            detail=str(exc),
+            error_code="validation_error",
+            retryable=False,
+        ),
+    )
 
 
 @app.get("/health")

@@ -31,6 +31,7 @@ class ChatMeta(BaseModel):
     context_characters: int
     context_truncated: bool
     answer_max_tokens: int
+    warnings: list[str] = Field(default_factory=list)
     token_usage: TokenUsage
 
 

@@ -47,6 +47,11 @@ class RetrievalService:
         cached_hits = self.cache.get_search_hits(query, requested_top_k, should_rerank)
         if cached_hits is not None:
             latency_ms = int((perf_counter() - started_at) * 1000)
+            warnings: list[str] = []
+            if not cached_hits:
+                warnings.append("No retrieval hits matched the current query.")
+            elif len(cached_hits) < requested_top_k:
+                warnings.append("Retrieval returned fewer hits than requested.")
             metrics_store.record_retrieval(cache_hit=True, reranked=should_rerank)
             return RetrievalResponse(
                 query=query,
@@ -57,6 +62,7 @@ class RetrievalService:
                     cache_hit=True,
                     reranked=should_rerank,
                     candidate_count=len(cached_hits),
+                    warnings=warnings,
                 ),
             )
 
@@ -94,6 +100,11 @@ class RetrievalService:
         )
         self.cache.set_search_hits(query, requested_top_k, should_rerank, final_hits)
         latency_ms = int((perf_counter() - started_at) * 1000)
+        warnings: list[str] = []
+        if not final_hits:
+            warnings.append("No retrieval hits matched the current query.")
+        elif len(final_hits) < requested_top_k:
+            warnings.append("Retrieval returned fewer hits than requested.")
         metrics_store.record_retrieval(cache_hit=False, reranked=should_rerank)
         return RetrievalResponse(
             query=query,
@@ -104,5 +115,6 @@ class RetrievalService:
                 cache_hit=False,
                 reranked=should_rerank,
                 candidate_count=candidate_count,
+                warnings=warnings,
             ),
         )
