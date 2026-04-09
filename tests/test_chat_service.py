@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.metrics import metrics_store
 from app.schemas.retrieval import RetrievalHit, RetrievalMeta, RetrievalResponse
 from app.services.chat import ChatService
 
@@ -74,7 +75,7 @@ async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch)
         system_prompt="answer briefly",
         request_id="req-123",
         rerank=True,
-        max_context_characters=60,
+        max_context_characters=40,
         max_answer_tokens=120,
     )
 
@@ -88,9 +89,14 @@ async def test_answer_builds_prompt_and_sources(monkeypatch: pytest.MonkeyPatch)
     assert response.meta.retrieval_cache_hit is True
     assert response.meta.retrieval_reranked is True
     assert response.meta.retrieval_candidate_count == 4
-    assert response.meta.context_characters <= 60
+    assert response.meta.context_characters <= 40
+    assert response.meta.context_truncated is True
     assert response.meta.answer_max_tokens == 120
     assert response.meta.token_usage.total_tokens_estimate >= 2
+    metrics = metrics_store.snapshot()
+    assert metrics["chat"]["total_requests"] == 1
+    assert metrics["chat"]["streamed_requests"] == 0
+    assert metrics["chat"]["context_truncations"] == 1
 
 
 @pytest.mark.asyncio
@@ -155,3 +161,6 @@ async def test_stream_answer_returns_sources_and_generator(monkeypatch: pytest.M
     assert "[1] First retrieved chunk." in str(captured["prompt"])
     assert captured["system_prompt"] is None
     assert captured["max_tokens"] == "64"
+    metrics = metrics_store.snapshot()
+    assert metrics["chat"]["total_requests"] == 1
+    assert metrics["chat"]["streamed_requests"] == 1

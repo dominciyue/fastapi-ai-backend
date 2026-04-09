@@ -29,6 +29,7 @@ class ChatMeta(BaseModel):
     retrieval_reranked: bool
     retrieval_candidate_count: int
     context_characters: int
+    context_truncated: bool
     answer_max_tokens: int
     token_usage: TokenUsage
 

@@ -10,7 +10,6 @@ from app.services.retrieval import RetrievalService
 
 @pytest.mark.asyncio
 async def test_search_returns_retrieval_hits(monkeypatch: pytest.MonkeyPatch) -> None:
-    metrics_store.reset()
     chunk_id = uuid4()
     document_id = uuid4()
     chunk = SimpleNamespace(
@@ -63,7 +62,6 @@ async def test_search_returns_retrieval_hits(monkeypatch: pytest.MonkeyPatch) ->
 async def test_search_returns_cached_hits_without_embedding(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    metrics_store.reset()
     cached_hit = RetrievalHit(
         chunk_id=uuid4(),
         document_id=uuid4(),
@@ -101,7 +99,6 @@ async def test_search_returns_cached_hits_without_embedding(
 
 @pytest.mark.asyncio
 async def test_search_reranks_hits_by_keyword_overlap(monkeypatch: pytest.MonkeyPatch) -> None:
-    metrics_store.reset()
     chunk_a = SimpleNamespace(
         id=uuid4(),
         document_id=uuid4(),

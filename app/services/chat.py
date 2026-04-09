@@ -4,6 +4,7 @@ from time import perf_counter
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.metrics import metrics_store
 from app.schemas.chat import ChatMeta, ChatResponse, ChatSource, TokenUsage
 from app.services.llm_client import OpenAICompatibleClient
 from app.services.retrieval import RetrievalService
@@ -28,15 +29,17 @@ class ChatService:
         self,
         hits: list[ChatSource],
         max_context_characters: int,
-    ) -> tuple[str, int]:
+    ) -> tuple[str, int, bool]:
         lines: list[str] = []
         total_characters = 0
+        truncated = False
 
         for idx, hit in enumerate(hits):
             chunk = f"[{idx + 1}] {hit.content}"
             separator = "\n\n" if lines else ""
             next_total = total_characters + len(separator) + len(chunk)
             if next_total > max_context_characters:
+                truncated = True
                 remaining = max_context_characters - total_characters - len(separator)
                 if remaining > 32:
                     chunk = chunk[:remaining].rstrip() + "..."
@@ -46,7 +49,7 @@ class ChatService:
             lines.append(chunk)
             total_characters = next_total
 
-        return "\n\n".join(lines), total_characters
+        return "\n\n".join(lines), total_characters, truncated
 
     async def answer(
         self,
@@ -76,7 +79,7 @@ class ChatService:
         ]
         context_limit = max_context_characters or self.settings.max_context_characters
         answer_limit = max_answer_tokens or self.settings.max_answer_tokens
-        context, context_characters = self._build_context(sources, context_limit)
+        context, context_characters, context_truncated = self._build_context(sources, context_limit)
         prompt = (
             "Use the context below to answer the user.\n"
             "If the context is insufficient, say so clearly.\n\n"
@@ -88,6 +91,14 @@ class ChatService:
             max_tokens=answer_limit,
         )
         latency_ms = int((perf_counter() - started_at) * 1000)
+        usage = self._estimate_token_usage(prompt, answer)
+        metrics_store.record_chat(
+            streamed=False,
+            prompt_tokens_estimate=usage.prompt_tokens_estimate,
+            completion_tokens_estimate=usage.completion_tokens_estimate,
+            context_characters=context_characters,
+            context_truncated=context_truncated,
+        )
         return ChatResponse(
             answer=answer,
             sources=sources,
@@ -98,8 +109,9 @@ class ChatService:
                 retrieval_reranked=retrieval_response.meta.reranked,
                 retrieval_candidate_count=retrieval_response.meta.candidate_count,
                 context_characters=context_characters,
+                context_truncated=context_truncated,
                 answer_max_tokens=answer_limit,
-                token_usage=self._estimate_token_usage(prompt, answer),
+                token_usage=usage,
             ),
         )
 
@@ -130,14 +142,30 @@ class ChatService:
         ]
         context_limit = max_context_characters or self.settings.max_context_characters
         answer_limit = max_answer_tokens or self.settings.max_answer_tokens
-        context, _context_characters = self._build_context(sources, context_limit)
+        context, context_characters, context_truncated = self._build_context(sources, context_limit)
         prompt = (
             "Use the context below to answer the user.\n"
             "If the context is insufficient, say so clearly.\n\n"
             f"Context:\n{context}\n\nQuestion: {query}"
         )
-        return sources, self.client.stream_chat(
+        raw_generator = self.client.stream_chat(
             prompt,
             system_prompt=system_prompt,
             max_tokens=answer_limit,
         )
+
+        async def tracked_generator() -> AsyncGenerator[str, None]:
+            chunks: list[str] = []
+            async for chunk in raw_generator:
+                chunks.append(chunk)
+                yield chunk
+            usage = self._estimate_token_usage(prompt, "".join(chunks))
+            metrics_store.record_chat(
+                streamed=True,
+                prompt_tokens_estimate=usage.prompt_tokens_estimate,
+                completion_tokens_estimate=usage.completion_tokens_estimate,
+                context_characters=context_characters,
+                context_truncated=context_truncated,
+            )
+
+        return sources, tracked_generator()

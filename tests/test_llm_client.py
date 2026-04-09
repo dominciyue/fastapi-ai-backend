@@ -120,3 +120,99 @@ def test_validate_embedding_dimensions_raises_on_mismatch() -> None:
             client._validate_embedding_dimensions([[0.1] * 1024])
     finally:
         settings.embedding_dimension = original_dimension
+
+
+@pytest.mark.asyncio
+async def test_chat_request_includes_max_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = get_settings()
+    original_chat_api_key = settings.chat_api_key
+    original_openai_api_key = settings.openai_api_key
+
+    settings.chat_api_key = "chat-key"
+    settings.openai_api_key = "openai-key"
+
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        is_error = False
+
+        @staticmethod
+        def json() -> dict:
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+    class FakeAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url: str, *, headers: dict, json: dict):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr("app.services.llm_client.httpx.AsyncClient", lambda **_: FakeAsyncClient())
+
+    try:
+        answer = await OpenAICompatibleClient().chat("hello", max_tokens=123)
+    finally:
+        settings.chat_api_key = original_chat_api_key
+        settings.openai_api_key = original_openai_api_key
+
+    assert answer == "ok"
+    assert captured["json"]["max_tokens"] == 123
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_request_includes_max_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = get_settings()
+    original_chat_api_key = settings.chat_api_key
+    original_openai_api_key = settings.openai_api_key
+
+    settings.chat_api_key = "chat-key"
+    settings.openai_api_key = "openai-key"
+
+    captured: dict[str, object] = {}
+
+    class FakeStreamResponse:
+        is_error = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def aiter_lines(self):
+            for line in ['data: {"choices":[{"delta":{"content":"hello "}}]}', "data: [DONE]"]:
+                yield line
+
+    class FakeAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        def stream(self, method: str, url: str, *, headers: dict, json: dict):
+            captured["method"] = method
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeStreamResponse()
+
+    monkeypatch.setattr("app.services.llm_client.httpx.AsyncClient", lambda **_: FakeAsyncClient())
+
+    try:
+        chunks = [
+            chunk
+            async for chunk in OpenAICompatibleClient().stream_chat("hello", max_tokens=77)
+        ]
+    finally:
+        settings.chat_api_key = original_chat_api_key
+        settings.openai_api_key = original_openai_api_key
+
+    assert chunks == ["hello "]
+    assert captured["json"]["max_tokens"] == 77
