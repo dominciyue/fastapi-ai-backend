@@ -1,22 +1,34 @@
 # Dify FastAPI RAG Tool Service
 
-`Dify FastAPI RAG Tool Service` 是一个面向 `AI 后端` 场景的独立服务，目标是把 `文档上传`、`异步索引`、`向量检索`、`流式问答` 这些核心能力通过 `FastAPI` 暴露出来，并且能作为 `Dify Workflow / Tool` 的外部能力接入。
+`Dify FastAPI RAG Tool Service` 是一个面向 AI Backend 场景的独立 RAG 后端服务，用于把文档上传、异步索引、向量检索、同步问答和流式问答能力以标准 HTTP 接口暴露出来，并作为 `Dify` 或其他上层系统的下游能力层接入。
 
-## 功能
+## 项目价值
+
+这个项目重点展示的是一条可交付、可部署、可集成、可观测的 AI 后端能力链路，而不是完整 SaaS 平台。
+
+它适合用于：
+
+- 独立封装知识库检索与问答能力
+- 对接 `Dify Workflow` / HTTP Tool
+- 本地演示、联调和交付验证
+- 作为 AI 后端面试作品展示架构、异步任务、缓存和接口设计能力
+
+## 核心能力
 
 - 文档上传：`POST /api/v1/documents/upload`
 - 异步索引：`POST /api/v1/documents/index`
-- 任务状态：`GET /api/v1/tasks/{task_id}`
+- 任务状态查询：`GET /api/v1/tasks/{task_id}`
 - 检索接口：`POST /api/v1/retrieval/search`
 - 同步问答：`POST /api/v1/chat/query`
 - 流式问答：`POST /api/v1/chat/stream`
+- 健康检查：`GET /health`
 - 就绪检查：`GET /health/ready`
-- 轻量 metrics：`GET /metrics` 返回进程内请求量、错误数、缓存命中和 rerank 统计
-- Redis 检索缓存：减少重复 query 的 embedding 与向量检索开销
-- 轻量 rerank：向量召回后按关键词重叠做本地重排
-- 请求级追踪信息：响应头与业务返回体携带 `X-Request-ID`
-- 响应耗时头：响应头携带 `X-Response-Time-Ms`
-- 基础 usage 元信息：同步问答返回估算的 token usage 与链路耗时
+- 轻量 metrics：`GET /metrics`
+- Redis 检索缓存
+- 轻量关键词 rerank
+- 请求级 `x-request-id`
+- 响应耗时头 `x-response-time-ms`
+- 标准化错误结构与调用方 warnings
 
 ## 技术栈
 
@@ -27,36 +39,23 @@
 - `SQLAlchemy`
 - `OpenAI-compatible API`
 - `Docker Compose`
-
-## 项目结构
-
-```text
-app/
-  api/
-  core/
-  models/
-  schemas/
-  services/
-  tasks/
-docs/
-tests/
-```
+- `GitHub Actions CI`
 
 ## 快速启动
 
-1. 复制环境变量：
+1. 复制配置文件：
 
 ```bash
 cp .env.example .env
 ```
 
-2. 启动依赖服务与应用：
+2. 启动服务：
 
 ```bash
 docker compose up --build
 ```
 
-如果你要跑更稳定的演示 / 交付环境，建议改用：
+如果你需要更稳定的演示 / 交付环境，建议使用：
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
@@ -64,150 +63,90 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 
 3. 访问：
 
-- OpenAPI: `http://localhost:8000/docs`
-- 健康检查: `http://localhost:8000/health`
-- 就绪检查: `http://localhost:8000/health/ready`
+- OpenAPI：`http://localhost:8000/docs`
+- 健康检查：`http://localhost:8000/health`
+- 就绪检查：`http://localhost:8000/health/ready`
 
-## 阶段记录
+## 最小验证
 
-- Week 1：`docs/week1-summary.md`
-- Week 2：`docs/week2-summary.md`
-- Week 3：`docs/week3-summary.md`
-- Week 4：`docs/week4-summary.md`
-- Week 5：`docs/week5-summary.md`
-- Dify Week 2 复盘：`docs/dify-week2-review.md`
-
-## Week 5 资产
-
-- 部署说明：`docs/deployment-guide.md`
-- 面试讲解提纲：`docs/interview-notes.md`
-
-## 环境变量
-
-最少需要配置：
-
-- `OPENAI_API_KEY`
-- `OPENAI_BASE_URL`
-- `CHAT_MODEL`
-- `EMBEDDING_MODEL`
-
-如果你使用本地或代理模型，只要兼容 OpenAI 的 `chat/completions` 与 `embeddings` 接口即可。
-
-如果你的聊天模型和 embedding 模型不在同一个提供方，也可以拆开配置：
-
-- `CHAT_BASE_URL`
-- `CHAT_API_KEY`
-- `EMBEDDING_BASE_URL`
-- `EMBEDDING_API_KEY`
-
-例如使用 `DeepSeek` 做聊天时，可以只配置：
-
-- `CHAT_BASE_URL=https://api.deepseek.com/v1`
-- `CHAT_API_KEY=<your-key>`
-- `CHAT_MODEL=deepseek-chat`
-
-如果暂时没有独立的 embedding 服务，项目会继续使用本地 mock embedding 作为演示模式，不会阻塞主链路联调。
-
-## 真实 Embedding 接入
-
-当前项目已经支持把 `chat` 和 `embedding` 拆开配置，但需要注意：
-
-- 你现在使用的 `DeepSeek` 账号只暴露了 `deepseek-chat` 和 `deepseek-reasoner`
-- 该账号下未发现可用的 embedding 模型
-- 直接请求 `https://api.deepseek.com/v1/embeddings` 会返回 `404`
-
-这意味着：
-
-- `DeepSeek` 目前适合继续做聊天模型
-- 真实 embedding 需要接入另一个兼容 OpenAI `/embeddings` 的提供方
-
-你需要额外准备：
-
-- `EMBEDDING_BASE_URL`
-- `EMBEDDING_API_KEY`
-- `EMBEDDING_MODEL`
-- `EMBEDDING_DIMENSION`
-
-配置完成后，可先运行：
-
-```bash
-python scripts/check_embedding_provider.py
-```
-
-它会输出：
-
-- 当前 embedding 服务地址
-- 当前 embedding 模型名
-- 配置的维度
-- 实际返回的向量维度
-
-如果返回维度和 `EMBEDDING_DIMENSION` 不一致，项目现在会直接报清晰错误，避免你在索引中途才发现问题。
-
-### 维度切换提醒
-
-`pgvector` 列维度是在表结构里固定的。
-
-如果你从 mock / 旧 embedding 模型切到新的真实 embedding 模型，且维度发生变化，例如：
-
-- `1536 -> 1024`
-
-那么你需要在本地重新创建或迁移数据库结构后，再重新做索引。对于当前演示项目，最直接的方式通常是重建本地容器数据卷后重新上传并索引文档。
-
-## Dify 集成
-
-建议把此服务配置为 Dify 中的 HTTP 工具或 Workflow 的 HTTP 请求节点：
-
-- `Dify` 工具接入优先使用：
-  - `POST /api/v1/retrieval/search`
-  - `POST /api/v1/chat/query`
-- `POST /api/v1/chat/stream` 保留给原生前端、脚本或自定义客户端直接消费 `SSE`
-- 当前 `Dify` 不适合直接把外部 `SSE` 上游流作为 HTTP Tool / HTTP Request Node 的输入
-
-具体接法见 [docs/dify-integration.md](docs/dify-integration.md)。
-也可以直接参考 `integrations/dify-tool.openapi.yaml` 导入工具描述。
-如果要直接复用一条最小 workflow，可参考 `integrations/dify-rag-workflow.yml`。
-如果要整理演示或交付过程，可结合 `docs/deployment-guide.md` 一起使用。
-
-## 开发说明
-
-本项目为了压缩 `4~6 周` 路线的交付时间，优先完成了：
-
-- 最小可用 RAG 主链路
-- 可独立部署的后端架构
-- 与 Dify 集成所需的 HTTP 能力
-
-第一版刻意没有加入：
-
-- 多租户
-- 复杂鉴权
-- reranker
-- 更完整的 metrics / tracing 平台接入
-
-当前已经补上的增强项包括：
-
-- Redis 检索缓存
-- 轻量关键词 `rerank`
-- 请求级 `request_id`
-- 轻量 `/metrics` 观测入口
-- 同步问答 `token usage` 估算与链路耗时元信息
-
-后续可以继续把这些能力升级到更完整的 `metrics / tracing / rerank` 体系。
-
-## 冒烟测试
-
-服务启动后，可以按下面顺序做一轮最小链路验证：
+服务启动后，推荐直接运行：
 
 ```bash
 python scripts/smoke_all.py
 ```
 
-如果你想逐步检查每个阶段，也可以按下面顺序单独执行：
+这会串行验证上传、索引、检索、同步问答和流式问答的完整主链路。
 
-```bash
-python scripts/smoke_upload.py
-python scripts/smoke_index.py <document_id>
-python scripts/smoke_task.py <task_id>
-python scripts/smoke_retrieval.py
-python scripts/smoke_query.py
-python scripts/smoke_stream.py
-```
+## 文档导航
+
+- 项目概览：`docs/overview.md`
+- 架构设计：`docs/architecture.md`
+- API 说明：`docs/api.md`
+- 配置说明：`docs/configuration.md`
+- Docker 部署：`docs/deployment/docker.md`
+- 验证流程：`docs/deployment/verification.md`
+- 故障排查：`docs/deployment/troubleshooting.md`
+- 可观测性：`docs/operations/observability.md`
+- Dify 集成：`docs/integrations/dify.md`
+- 数据模型：`docs/reference/database.md`
+
+## 配置说明
+
+最少需要确认以下配置：
+
+- `DATABASE_URL`
+- `REDIS_URL`
+- `CELERY_BROKER_URL`
+- `CELERY_RESULT_BACKEND`
+- `CHAT_MODEL`
+- `EMBEDDING_MODEL`
+
+如果 chat 与 embedding 不在同一个提供方，还可以拆开配置：
+
+- `CHAT_BASE_URL`
+- `CHAT_API_KEY`
+- `EMBEDDING_BASE_URL`
+- `EMBEDDING_API_KEY`
+- `EMBEDDING_DIMENSION`
+
+详细说明见 `docs/configuration.md`。
+
+## Dify 集成
+
+推荐把本服务作为 Dify 的外部能力层接入：
+
+- 优先导入：
+  - `POST /api/v1/retrieval/search`
+  - `POST /api/v1/chat/query`
+- `POST /api/v1/chat/stream` 更适合原生客户端直接消费，不作为当前推荐的 Dify 主路径
+
+可直接使用：
+
+- `integrations/dify-tool.openapi.yaml`
+- `integrations/dify-rag-workflow.yml`
+
+详细说明见 `docs/integrations/dify.md`。
+
+## 工程化能力
+
+当前项目已经具备以下工程化基础：
+
+- `GitHub Actions CI`
+- Docker 开发态与稳定演示态双 compose 方案
+- `health` / `readiness` 检查
+- 轻量 `/metrics`
+- 检索缓存与 rerank
+- 请求级追踪与响应耗时
+- 容器环境下的一键冒烟验证
+
+## 当前边界
+
+当前版本刻意不覆盖以下范围：
+
+- 多租户
+- 复杂鉴权
+- 独立 reranker 模型服务
+- 完整 tracing / APM 平台
+- 企业级权限体系
+
+因此它更适合作为独立 RAG 后端服务样本，而不是完整业务平台。
